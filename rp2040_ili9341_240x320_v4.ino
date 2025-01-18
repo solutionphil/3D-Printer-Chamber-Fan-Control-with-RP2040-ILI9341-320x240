@@ -8,6 +8,9 @@ TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft);
 SliderWidget slider = SliderWidget(&tft, &knob);
 
+// Global slider parameters
+slider_t sliderParam;  // Store slider parameters globally for reuse
+
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1"
 #define REPEAT_CAL false
@@ -73,9 +76,9 @@ void setup() {
   Serial.begin(9600);  // Use serial port
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
   
-  // Initialize the knob sprite early
-  knob.setColorDepth(8);
-  knob.createSprite(30, 40);  // Size for the slider knob
+  // Initialize knob sprite with better visibility
+  knob.setColorDepth(16);
+  knob.createSprite(40, 50);  // Larger size for better visibility
   knob.fillSprite(TFT_BLACK);
   
   delay(1000);
@@ -112,6 +115,8 @@ void loop(void) {
       if (slider.checkTouch(t_x, t_y)) {
         dutyCycle = slider.getSliderPosition();
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+        // Redraw the slider with stored parameters
+        slider.drawSlider(20, 160, sliderParam);
         
         // Update percentage display
         tft.fillRect(90, 110, 80, 30, TFT_BLACK);
@@ -191,39 +196,40 @@ void displayScreen2() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
   
-  // Ensure knob sprite is ready
-  if (!knob.created()) knob.createSprite(30, 40);
-  
+  // Recreate knob sprite for this screen
+  if (knob.created()) knob.deleteSprite();
+  knob.createSprite(40, 50);
+  knob.fillSprite(TFT_RED);  // Make it visible for debugging
+   
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
-    tft.setTextSize(0);
+  tft.setTextSize(0);
   tft.drawString("Brightness", 30, 50);
   
-  // Create slider parameters
-  slider_t param;
-  
+  // Reset the parameters
+  sliderParam = {};  
   // Slider slot parameters
-  param.slotWidth = 9;
-  param.slotLength = 200;
-  param.slotColor = TFT_BLUE;
-  param.slotBgColor = TFT_BLACK;
-  param.orientation = H_SLIDER;
+  sliderParam.slotWidth = 9;
+  sliderParam.slotLength = 200;
+  sliderParam.slotColor = TFT_BLUE;
+  sliderParam.slotBgColor = TFT_BLACK;
+  sliderParam.orientation = H_SLIDER;
   
   // Slider knob parameters
-  param.knobWidth = 20;
-  param.knobHeight = 30;
-  param.knobRadius = 5;
-  param.knobColor = TFT_WHITE;
-  param.knobLineColor = TFT_RED;
+  sliderParam.knobWidth = 40;
+  sliderParam.knobHeight = 50;
+  sliderParam.knobRadius = 5;
+  sliderParam.knobColor = TFT_RED;
+  sliderParam.knobLineColor = TFT_RED;
    
   // Slider range and movement
-  param.sliderLT = 0;
-  param.sliderRB = 100;
-  param.startPosition = dutyCycle;
-  param.sliderDelay = 0;
+  sliderParam.sliderLT = 0;
+  sliderParam.sliderRB = 100;
+  sliderParam.startPosition = dutyCycle;
+  sliderParam.sliderDelay = 0;
   
   // Draw the slider
-  slider.drawSlider(20, 160, param);
+  slider.drawSlider(20, 160, sliderParam);
   
   // Update percentage display
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
