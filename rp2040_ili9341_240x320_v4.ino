@@ -71,8 +71,13 @@ char backLabel[] = "Back"; // Define the button label as a mutable char array
 
 void setup() {
   Serial.begin(9600);  // Use serial port
-    // Initialize PWM for backlight
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
+  
+  // Initialize the knob sprite early
+  knob.setColorDepth(8);
+  knob.createSprite(30, 40);  // Size for the slider knob
+  knob.fillSprite(TFT_BLACK);
+  
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
   tft.init();  // Initialize the TFT screen
@@ -185,6 +190,10 @@ void displayScreen1() {
 void displayScreen2() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
+  
+  // Ensure knob sprite is ready
+  if (!knob.created()) knob.createSprite(30, 40);
+  
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
     tft.setTextSize(0);
@@ -215,11 +224,12 @@ void displayScreen2() {
   
   // Draw the slider
   slider.drawSlider(20, 160, param);
-
-        // Update percentage display
-        tft.fillRect(90, 110, 80, 30, TFT_BLACK);
-        tft.setTextColor(TFT_GREEN);
-        tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+  slider.redrawSlider();  // Force immediate redraw
+  
+  // Update percentage display
+  tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
 
 }
 
@@ -452,4 +462,3 @@ void touch_calibrate() {
     }
   }
 }
-
