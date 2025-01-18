@@ -224,7 +224,6 @@ void displayScreen2() {
   
   // Draw the slider
   slider.drawSlider(20, 160, param);
-  slider.redrawSlider();  // Force immediate redraw
   
   // Update percentage display
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
