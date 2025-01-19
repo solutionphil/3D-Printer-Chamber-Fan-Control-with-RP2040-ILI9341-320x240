@@ -1,11 +1,12 @@
 #include "FS.h"
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
-#include <TFT_eWidget.h>      // Hardware-specific library
-#include "RP2040_PWM.h"    // PWM library
+#include <TFT_eWidget.h>  // Widget library for sliders
+#include "RP2040_PWM.h"   // PWM library
+
+// Initialize TFT and slider objects
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
-// Create TFT sprite for slider knob and slider widget object
-TFT_eSprite knob = TFT_eSprite(&tft);
+TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
 SliderWidget slider = SliderWidget(&tft, &knob);
 
 #define _PWM_LOGLEVEL_        1
@@ -14,6 +15,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 #define pinToUse      7
 
 // Keypad parameters
+// These define the layout and appearance of the keypad buttons
 #define KEY_X 45
 #define KEY_Y 90
 #define KEY_W 66
@@ -25,13 +27,13 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 #define DISP_Y 10
 #define DISP_W 238
 #define DISP_H 50
-#define DISP_TSIZE 3
 #define DISP_TCOLOR TFT_CYAN
 #define NUM_LEN 12
 #define STATUS_X 120
-#define STATUS_Y 65
+
+// Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
-#define LABEL2_FONT &FreeSansBold12pt7b // Key label font 2
+#define LABEL2_FONT &FreeSansBold12pt7b    // Key label font 2
 
 RP2040_PWM* PWM_Instance;
 
@@ -39,6 +41,8 @@ float frequency = 1831;
 float dutyCycle = 80;
 
 char numberBuffer[NUM_LEN + 1] = "";
+
+// Keypad button labels and colors
 uint8_t numberIndex = 0;
 
 char keyLabel[15][5] = {"New", "Del", "Send", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "#" };
@@ -47,6 +51,8 @@ uint16_t keyColor[15] = {TFT_RED, TFT_BLACK, TFT_DARKGREEN, TFT_BLUE, TFT_BLUE, 
                          TFT_BLUE, TFT_BLUE, TFT_BLUE};
 
 TFT_eSPI_Button key[15];  // Invoke the TFT_eSPI button class and create all the button objects
+
+// Buttons for various screens
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button increaseButton;  // Button to switch screens
 TFT_eSPI_Button decreaseButton;  // Button to switch screens
@@ -59,6 +65,8 @@ TFT_eSPI_Button noButton;
 
 int currentScreen = 0;
 const int totalScreens = 5;
+
+// Labels for other buttons
 char nextButtonLabel[] = "Next"; // Define the button label as a mutable char array
 char incButtonLabel[] = "Increase"; // Define the button label as a mutable char array
 char decButtonLabel[] = "Decrease"; // Define the button label as a mutable char array
@@ -69,25 +77,27 @@ char backLabel[] = "Back"; // Define the button label as a mutable char array
 void setup() {
   Serial.begin(9600);  // Use serial port
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
-  
+
   // Initialize the knob sprite early
   knob.setColorDepth(8);
   knob.createSprite(30, 40);  // Size for the slider knob
   knob.fillSprite(TFT_BLACK);
-  
+
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
   tft.init();  // Initialize the TFT screen
   tft.setRotation(0);  // Set the rotation before we calibrate
+
+  // Calibrate the touch screen and display the initial screen
   touch_calibrate();  // Calibrate the touch screen and retrieve the scaling factors
   displayScreen(currentScreen);  // Display the initial screen
- 
 }
 
 void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // To store the touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Check for valid touch
 
+  // Handle touch interactions based on the current screen
   if (currentScreen == 0) {  // Only check keypad buttons on the keypad screen
     for (uint8_t b = 0; b < 15; b++) {
       key[b].press(pressed && key[b].contains(t_x, t_y));  // Update button state
@@ -118,6 +128,8 @@ void loop(void) {
   // Check for touch on the screen switch button
   screenButton.press(pressed && screenButton.contains(t_x, t_y));
   if (screenButton.justReleased()) screenButton.drawButton();
+
+  // Switch to the next screen when the button is pressed
   if (screenButton.justPressed()) {
     currentScreen = (currentScreen + 1) % totalScreens;
     displayScreen(currentScreen);
@@ -129,22 +141,25 @@ void loop(void) {
     increaseButton.press(pressed && increaseButton.contains(t_x, t_y));
     decreaseButton.press(pressed && decreaseButton.contains(t_x, t_y));
 
+    // Handle brightness adjustment buttons
     if (increaseButton.justReleased()) increaseButton.drawButton();
     if (increaseButton.justPressed()) adjustBacklight(10);  // Increase brightness
 
     if (decreaseButton.justReleased()) decreaseButton.drawButton();
     if (decreaseButton.justPressed()) adjustBacklight(-10);  // Decrease brightness
   }
-// Check for touch on file explorer buttons only on screen 4
+
+  // Check for touch on file explorer buttons only on screen 4
   if (currentScreen == 4) {
     for (uint8_t i = 0; i < 10; i++) {
       fileButtons[i].press(pressed && fileButtons[i].contains(t_x, t_y));
+
+      // Handle file button interactions
       if (fileButtons[i].justReleased()) fileButtons[i].drawButton();
       if (fileButtons[i].justPressed()) handleFileButtonPress(i);
     }
+  }
 }
-}
-
 
 void displayScreen(int screen) {
   tft.fillScreen(TFT_BLACK);  // Clear the screen
@@ -187,7 +202,6 @@ void displayScreen2() {
   tft.fillScreen(TFT_BLACK);
   
   // Ensure knob sprite is ready
-
   if (!knob.created()) knob.createSprite(30, 40);
   
   tft.setTextColor(TFT_CYAN);
@@ -226,7 +240,7 @@ void displayScreen2() {
   slider.drawSlider(20, 160, param);
 
   // Draw scale for 10% increments
-  //drawSliderScale(20, 160, param.slotLength, param.sliderLT, param.sliderRB);
+  drawSliderScale(20, 160, param.slotLength, param.sliderLT, param.sliderRB);
 
   int16_t x, y;    // x and y can be negative
   uint16_t w, h;   // Width and height
@@ -236,7 +250,6 @@ void displayScreen2() {
   //slider.setSliderPosition(90);
   //delay(100);
   slider.setSliderPosition(dutyCycle);
-
 }
 
 void displayScreen3() {
@@ -245,7 +258,7 @@ void displayScreen3() {
   tft.setTextSize(1);
   tft.setCursor(10, 70);
   tft.print("Control Brightness");
-  // Add more elements for Screen 2
+  
   // Add brightness control buttons 
   tft.setFreeFont(LABEL2_FONT); 
 
@@ -280,7 +293,6 @@ void displayScreen4() {
     i++;
   }
 }
-
 
 bool displayDeletionPrompt(String fileName) {
   tft.fillScreen(TFT_BLACK);
@@ -367,7 +379,6 @@ void displayFileContents(String fileName) {
   }
 }
 
-
 void handleKeyPress(uint8_t b) {
   key[b].drawButton(true);  // Draw inverted state
 
@@ -380,10 +391,9 @@ void handleKeyPress(uint8_t b) {
     adjustBacklight(10);  // Increase backlight
 
   } else if (b == 2) {
-
     Serial.println(numberBuffer);
-  } else if (b == 0) {
 
+  } else if (b == 0) {
     numberIndex = 0;  // Reset buffer
     numberBuffer[numberIndex] = 0;  // Zero terminate
     adjustBacklight(-10);  // Decrease backlight
@@ -476,6 +486,6 @@ void drawSliderScale(int x, int y, int length, int minValue, int maxValue) {
   for (int i = 0; i <= stepCount; i++) {
     int stepX = x + i * stepSpacing;
     tft.drawLine(stepX, y - 5, stepX, y + 5, TFT_WHITE); // Draw tick mark
-    tft.drawString(String(i * 10) + "%", stepX - 10, y + 10); // Draw percentage label
+   // tft.drawString(String(i * 10) + "%", stepX - 10, y + 10); // Draw percentage label
   }
 }
