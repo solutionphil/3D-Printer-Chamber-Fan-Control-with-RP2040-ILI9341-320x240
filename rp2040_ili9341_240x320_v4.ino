@@ -1,3 +1,25 @@
+/*
+ * Program Name: RP2040 TFT Touch UI with PWM Brightness Control
+ * Version: 1.0
+ * Author: [Your Name]
+ * Date: [Today's Date]
+ *
+ * Description:
+ * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
+ * It provides a touch-based UI with multiple screens, PWM-based brightness control, and a file explorer
+ * using SPIFFS. The program includes features like touch calibration, slider-based brightness adjustment,
+ * and file management.
+ *
+ * Hardware:
+ * - RP2040 microcontroller
+ * - ILI9341 TFT display with touch screen
+ * - PWM pin for brightness control
+ *
+ * Libraries:
+ * - TFT_eSPI: For TFT display control
+ * - RP2040_PWM: For PWM-based brightness control
+ */
+
 #include "FS.h"
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
@@ -14,6 +36,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 #define REPEAT_CAL false
 #define pinToUse      7
 
+// Define constants for screen dimensions and colors
 #define DISP_X 1
 #define DISP_Y 10
 #define DISP_W 238
@@ -28,6 +51,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 
 RP2040_PWM* PWM_Instance;
 
+// Initialize PWM instance for brightness control
 float frequency = 1831;
 float dutyCycle = 80;
 
@@ -54,7 +78,10 @@ char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
 
 void setup() {
-  Serial.begin(9600);  // Initialize serial communication
+  // Initialize serial communication for debugging
+  Serial.begin(9600);  
+
+  // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
 
   // Initialize the knob sprite early
@@ -64,17 +91,20 @@ void setup() {
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-  tft.init();  // Initialize the TFT screen
-  tft.setRotation(0);  // Set the rotation before we calibrate
+
+  // Initialize the TFT display and set its rotation
+  tft.init();  
+  tft.setRotation(0);  
 
   // Calibrate the touch screen and display the initial screen
-  touch_calibrate();  // Calibrate the touch screen and retrieve the scaling factors
-  displayScreen(currentScreen);  // Display the initial screen
+  touch_calibrate();  
+  displayScreen(currentScreen);  
 }
 
 void loop(void) {
-  uint16_t t_x = 0, t_y = 0;  // To store the touch coordinates
-  bool pressed = tft.getTouch(&t_x, &t_y);  // Check for valid touch
+  // Main loop to handle touch input and update screens
+  uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
+  bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
   if (currentScreen == 0) {  // Main menu screen
     for (uint8_t b = 0; b < 4; b++) {
@@ -178,7 +208,6 @@ void displayScreen1() {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Screen 1");
-
 }
 
 void displayScreen2() {
@@ -228,7 +257,6 @@ void displayScreen2() {
   slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
   slider.setSliderPosition(dutyCycle);
-
 }
 
 void displayScreen3() {
@@ -245,7 +273,6 @@ void displayScreen3() {
   decreaseButton.initButton(&tft, 120, 250, 190, 80, TFT_WHITE, TFT_RED, TFT_WHITE, decButtonLabel, 1); 
   increaseButton.drawButton(); 
   decreaseButton.drawButton(); 
-
 }
 
 void displayScreen4() {
@@ -271,7 +298,6 @@ void displayScreen4() {
     fileButtons[i].drawButton();
     file = root.openNextFile();
     i++;
-
   }
 }
 
@@ -323,7 +349,7 @@ void handleFileButtonPress(uint8_t index) {
 
 void displayFileContents(String fileName) {
   tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
+  t ft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   tft.setCursor(10, 20);
@@ -360,12 +386,15 @@ void displayFileContents(String fileName) {
   }
 }
 
+// Function to adjust backlight brightness
 void adjustBacklight(int change) {
   dutyCycle = constrain(dutyCycle + change, 0, 100);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-}  // Adjust backlight brightness
+}
 
 void drawMainMenu() {
+  // Function to display the main menu
+  // Draws buttons for navigating to different screens
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
@@ -383,6 +412,7 @@ void drawMainMenu() {
   }
 }
 
+// Function to handle touch calibration
 void touch_calibrate() {
   uint16_t calData[5];
   uint8_t calDataOK = 0;
@@ -430,5 +460,3 @@ void touch_calibrate() {
     }
   }
 }
-
-
