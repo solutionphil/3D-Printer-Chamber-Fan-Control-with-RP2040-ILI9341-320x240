@@ -103,6 +103,8 @@ void loop(void) {
     if (pressed) {
       if (slider.checkTouch(t_x, t_y)) {
         dutyCycle = slider.getSliderPosition();
+        dutyCycle = round(dutyCycle / 10) * 10; // Snap to nearest 10% increment
+        slider.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
         
         // Update percentage display
@@ -140,7 +142,8 @@ void loop(void) {
       if (fileButtons[i].justReleased()) fileButtons[i].drawButton();
       if (fileButtons[i].justPressed()) handleFileButtonPress(i);
     }
-}}
+}
+}
 
 
 void displayScreen(int screen) {
@@ -206,7 +209,7 @@ void displayScreen2() {
   param.slotColor = TFT_BLUE;
   param.slotBgColor = TFT_YELLOW;
   param.orientation = H_SLIDER;
-    
+  
   // Slider knob parameters
   param.knobWidth = 20;
   param.knobHeight = 30;
@@ -221,7 +224,10 @@ void displayScreen2() {
   param.sliderDelay = 0;
   // Draw the slider
   slider.drawSlider(20, 160, param);
-  // Show bounding box (1 pixel outside slider working area)
+
+  // Draw scale for 10% increments
+  //drawSliderScale(20, 160, param.slotLength, param.sliderLT, param.sliderRB);
+
   int16_t x, y;    // x and y can be negative
   uint16_t w, h;   // Width and height
   slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
@@ -459,5 +465,17 @@ void touch_calibrate() {
       f.write((const unsigned char *)calData, 14);
       f.close();
     }
+  }
+}
+
+// Function to draw scale for 10% increments
+void drawSliderScale(int x, int y, int length, int minValue, int maxValue) {
+  int stepCount = (maxValue - minValue) / 10; // Calculate number of steps
+  int stepSpacing = length / stepCount;      // Calculate spacing between steps
+
+  for (int i = 0; i <= stepCount; i++) {
+    int stepX = x + i * stepSpacing;
+    tft.drawLine(stepX, y - 5, stepX, y + 5, TFT_WHITE); // Draw tick mark
+    tft.drawString(String(i * 10) + "%", stepX - 10, y + 10); // Draw percentage label
   }
 }
