@@ -14,15 +14,6 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 #define REPEAT_CAL false
 #define pinToUse      7
 
-// Keypad parameters
-// These define the layout and appearance of the keypad buttons
-#define KEY_X 45
-#define KEY_Y 90
-#define KEY_W 66
-#define KEY_H 40
-#define KEY_SPACING_X 10
-#define KEY_SPACING_Y 10
-#define KEY_TEXTSIZE 1
 #define DISP_X 1
 #define DISP_Y 10
 #define DISP_W 238
@@ -40,19 +31,6 @@ RP2040_PWM* PWM_Instance;
 float frequency = 1831;
 float dutyCycle = 80;
 
-char numberBuffer[NUM_LEN + 1] = "";
-
-// Keypad button labels and colors
-uint8_t numberIndex = 0;
-
-char keyLabel[15][5] = {"New", "Del", "Send", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "#" };
-uint16_t keyColor[15] = {TFT_RED, TFT_BLACK, TFT_DARKGREEN, TFT_BLUE, TFT_BLUE, TFT_BLUE,
-                         TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE,
-                         TFT_BLUE, TFT_BLUE, TFT_BLUE};
-
-TFT_eSPI_Button key[15];  // Invoke the TFT_eSPI button class and create all the button objects
-
-// Buttons for various screens
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button increaseButton;  // Button to switch screens
 TFT_eSPI_Button decreaseButton;  // Button to switch screens
@@ -62,6 +40,7 @@ String buttonLabels[10];
 TFT_eSPI_Button backButton;
 TFT_eSPI_Button yesButton;
 TFT_eSPI_Button noButton;
+TFT_eSPI_Button mainMenuButtons[4]; // Buttons for main menu
 
 int currentScreen = 0;
 const int totalScreens = 5;
@@ -75,7 +54,7 @@ char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
 
 void setup() {
-  Serial.begin(9600);  // Use serial port
+  Serial.begin(9600);  // Initialize serial communication
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
 
   // Initialize the knob sprite early
@@ -97,26 +76,26 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // To store the touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Check for valid touch
 
-  // Handle touch interactions based on the current screen
-  if (currentScreen == 0) {  // Only check keypad buttons on the keypad screen
-    for (uint8_t b = 0; b < 15; b++) {
-      key[b].press(pressed && key[b].contains(t_x, t_y));  // Update button state
+  if (currentScreen == 0) {  // Main menu screen
+    for (uint8_t b = 0; b < 4; b++) {
+      mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
     }
 
-    for (uint8_t b = 0; b < 15; b++) {
-      tft.setFreeFont(b < 3 ? LABEL1_FONT : LABEL2_FONT);
-
-      if (key[b].justReleased()) key[b].drawButton();  // Draw normal state
-      if (key[b].justPressed()) handleKeyPress(b);  // Handle key press
+    for (uint8_t b = 0; b < 4; b++) {
+      if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
+      if (mainMenuButtons[b].justPressed()) {
+        currentScreen = b + 1;  // Navigate to the selected screen
+        displayScreen(currentScreen);  // Display the selected screen
+        delay(500);  // Debounce delay
+      }
     }
   } else if (currentScreen == 2) {
     if (pressed) {
       if (slider.checkTouch(t_x, t_y)) {
-        dutyCycle = slider.getSliderPosition();
-        dutyCycle = round(dutyCycle / 10) * 10; // Snap to nearest 10% increment
+        // Handle slider touch logic
+        dutyCycle = round(slider.getSliderPosition() / 10) * 10; // Snap to nearest 10% increment
         slider.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        
         // Update percentage display
         tft.fillRect(90, 110, 80, 30, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
@@ -161,15 +140,15 @@ void loop(void) {
   }
 }
 
-void displayScreen(int screen) {
+void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
 
   switch (screen) {
     case 0:
-      drawKeypad();
+      drawMainMenu();
       break;
     case 1:
-      displayScreen1();
+      displayScreen1();  // Display screen 1
       break;
     case 2:
       displayScreen2();
@@ -178,7 +157,7 @@ void displayScreen(int screen) {
       displayScreen3();
       break;
     case 4:
-      displayScreen4();
+      displayScreen4();  // Display file explorer
       break;
   }
 
@@ -186,6 +165,7 @@ void displayScreen(int screen) {
   tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
   screenButton.drawButton();
+  backButton.initButton(&tft, 200, 280, 60, 30, TFT_WHITE, TFT_RED, TFT_WHITE, backLabel, 1); // Back button
 }
 
 void displayScreen1() {
@@ -194,7 +174,7 @@ void displayScreen1() {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Screen 1");
-  // Add more elements for Screen 1
+  backButton.drawButton();  // Draw back button
 }
 
 void displayScreen2() {
@@ -246,10 +226,8 @@ void displayScreen2() {
   uint16_t w, h;   // Width and height
   slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
-  //set slider correctly
-  //slider.setSliderPosition(90);
-  //delay(100);
   slider.setSliderPosition(dutyCycle);
+  backButton.drawButton();  // Add back button
 }
 
 void displayScreen3() {
@@ -266,6 +244,7 @@ void displayScreen3() {
   decreaseButton.initButton(&tft, 120, 250, 190, 80, TFT_WHITE, TFT_RED, TFT_WHITE, decButtonLabel, 1); 
   increaseButton.drawButton(); 
   decreaseButton.drawButton(); 
+  backButton.drawButton();  // Add back button
 }
 
 void displayScreen4() {
@@ -291,6 +270,7 @@ void displayScreen4() {
     fileButtons[i].drawButton();
     file = root.openNextFile();
     i++;
+    backButton.drawButton();  // Add back button to file explorer
   }
 }
 
@@ -363,14 +343,14 @@ void displayFileContents(String fileName) {
   file.close();
 
   // Add a button to go back to the file explorer screen
-  backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
-  backButton.drawButton();
+  back_Button.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
+  back_Button.drawButton();
 
   while (true) {
     uint16_t t_x = 0, t_y = 0;
     bool pressed = tft.getTouch(&t_x, &t_y);
 
-    backButton.press(pressed && backButton.contains(t_x, t_y));
+    back_Button.press(pressed && back_Button.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
       displayScreen4();
@@ -379,54 +359,26 @@ void displayFileContents(String fileName) {
   }
 }
 
-void handleKeyPress(uint8_t b) {
-  key[b].drawButton(true);  // Draw inverted state
-
-  if (b >= 3 && numberIndex < NUM_LEN) {
-    numberBuffer[numberIndex++] = keyLabel[b][0];
-    numberBuffer[numberIndex] = 0;  // Zero terminate
-
-  } else if (b == 1 && numberIndex > 0) {
-    numberBuffer[--numberIndex] = 0;  // Delete last character
-    adjustBacklight(10);  // Increase backlight
-
-  } else if (b == 2) {
-    Serial.println(numberBuffer);
-
-  } else if (b == 0) {
-    numberIndex = 0;  // Reset buffer
-    numberBuffer[numberIndex] = 0;  // Zero terminate
-    adjustBacklight(-10);  // Decrease backlight
-  }
-
-  updateDisplay();
-}
-
-void updateDisplay() {
-  tft.setTextDatum(TL_DATUM);
-  tft.setFreeFont(&FreeSans18pt7b);
-  tft.setTextColor(DISP_TCOLOR);
-
-  int xwidth = tft.drawString(numberBuffer, DISP_X + 4, DISP_Y + 12);
-  tft.fillRect(DISP_X + 4 + xwidth, DISP_Y + 1, DISP_W - xwidth - 5, DISP_H - 2, TFT_BLACK);
-}
-
 void adjustBacklight(int change) {
   dutyCycle = constrain(dutyCycle + change, 0, 100);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-}
+}  // Adjust backlight brightness
 
-void drawKeypad() {
-  for (uint8_t row = 0; row < 5; row++) {
-    for (uint8_t col = 0; col < 3; col++) {
-      uint8_t b = col + row * 3;
-      tft.setFreeFont(b < 3 ? LABEL1_FONT : LABEL2_FONT);
-      key[b].initButton(&tft, KEY_X + col * (KEY_W + KEY_SPACING_X),
-                        KEY_Y + row * (KEY_H + KEY_SPACING_Y),
-                        KEY_W, KEY_H, TFT_WHITE, keyColor[b], TFT_WHITE,
-                        keyLabel[b], KEY_TEXTSIZE);
-      key[b].drawButton();
-    }
+void drawMainMenu() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 50);
+  tft.print("Main Menu");
+
+  mainMenuButtons[0].initButton(&tft, 120, 100, 200, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 1", 1);
+  mainMenuButtons[1].initButton(&tft, 120, 150, 200, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Brightness", 1);
+  mainMenuButtons[2].initButton(&tft, 120, 200, 200, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Control Brightness", 1);
+  mainMenuButtons[3].initButton(&tft, 120, 250, 200, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"File Explorer", 1);
+
+  for (uint8_t i = 0; i < 4; i++) {
+    mainMenuButtons[i].drawButton();
   }
 }
 
@@ -486,6 +438,5 @@ void drawSliderScale(int x, int y, int length, int minValue, int maxValue) {
   for (int i = 0; i <= stepCount; i++) {
     int stepX = x + i * stepSpacing;
     tft.drawLine(stepX, y - 5, stepX, y + 5, TFT_WHITE); // Draw tick mark
-   // tft.drawString(String(i * 10) + "%", stepX - 10, y + 10); // Draw percentage label
   }
 }
