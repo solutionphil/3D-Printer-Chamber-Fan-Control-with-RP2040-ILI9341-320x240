@@ -8,9 +8,6 @@ TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft);
 SliderWidget slider = SliderWidget(&tft, &knob);
 
-// Global slider parameters
-slider_t sliderParam;  // Store slider parameters globally for reuse
-
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1"
 #define REPEAT_CAL false
@@ -36,11 +33,10 @@ slider_t sliderParam;  // Store slider parameters globally for reuse
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
 #define LABEL2_FONT &FreeSansBold12pt7b // Key label font 2
 
-
 RP2040_PWM* PWM_Instance;
 
-float frequency = 915.53;
-float dutyCycle = 90;
+float frequency = 1831;
+float dutyCycle = 80;
 
 char numberBuffer[NUM_LEN + 1] = "";
 uint8_t numberIndex = 0;
@@ -70,15 +66,13 @@ char yesLabel[] = "YES"; // Define the button label as a mutable char array
 char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
 
-
-
 void setup() {
   Serial.begin(9600);  // Use serial port
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
   
-  // Initialize knob sprite with better visibility
-  knob.setColorDepth(16);
-  knob.createSprite(40, 50);  // Larger size for better visibility
+  // Initialize the knob sprite early
+  knob.setColorDepth(8);
+  knob.createSprite(30, 40);  // Size for the slider knob
   knob.fillSprite(TFT_BLACK);
   
   delay(1000);
@@ -87,12 +81,7 @@ void setup() {
   tft.setRotation(0);  // Set the rotation before we calibrate
   touch_calibrate();  // Calibrate the touch screen and retrieve the scaling factors
   displayScreen(currentScreen);  // Display the initial screen
-  delay(1000);
-
-  
-  slider.setSliderPosition(dutyCycle);
-
-
+ 
 }
 
 void loop(void) {
@@ -115,8 +104,6 @@ void loop(void) {
       if (slider.checkTouch(t_x, t_y)) {
         dutyCycle = slider.getSliderPosition();
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        // Redraw the slider with stored parameters
-        slider.drawSlider(20, 160, sliderParam);
         
         // Update percentage display
         tft.fillRect(90, 110, 80, 30, TFT_BLACK);
@@ -196,45 +183,53 @@ void displayScreen2() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
   
-  // Recreate knob sprite for this screen
-  if (knob.created()) knob.deleteSprite();
-  knob.createSprite(40, 50);
-  knob.fillSprite(TFT_RED);  // Make it visible for debugging
-   
+  // Ensure knob sprite is ready
+
+  if (!knob.created()) knob.createSprite(30, 40);
+  
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(0);
   tft.drawString("Brightness", 30, 50);
-  
-  // Reset the parameters
-  sliderParam = {};  
-  // Slider slot parameters
-  sliderParam.slotWidth = 9;
-  sliderParam.slotLength = 200;
-  sliderParam.slotColor = TFT_BLUE;
-  sliderParam.slotBgColor = TFT_BLACK;
-  sliderParam.orientation = H_SLIDER;
-  
-  // Slider knob parameters
-  sliderParam.knobWidth = 40;
-  sliderParam.knobHeight = 50;
-  sliderParam.knobRadius = 5;
-  sliderParam.knobColor = TFT_RED;
-  sliderParam.knobLineColor = TFT_RED;
-   
-  // Slider range and movement
-  sliderParam.sliderLT = 0;
-  sliderParam.sliderRB = 100;
-  sliderParam.startPosition = dutyCycle;
-  sliderParam.sliderDelay = 0;
-  
-  // Draw the slider
-  slider.drawSlider(20, 160, sliderParam);
-  
+
   // Update percentage display
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
   tft.setTextColor(TFT_GREEN);
   tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+
+  // Create slider parameters
+  slider_t param;
+  
+  // Slider slot parameters
+  param.slotWidth = 10;
+  param.slotLength = 200;
+  param.slotColor = TFT_BLUE;
+  param.slotBgColor = TFT_YELLOW;
+  param.orientation = H_SLIDER;
+    
+  // Slider knob parameters
+  param.knobWidth = 20;
+  param.knobHeight = 30;
+  param.knobRadius = 5;
+  param.knobColor = TFT_WHITE;
+  param.knobLineColor = TFT_RED;
+   
+  // Slider range and movement
+  param.sliderLT = 10;
+  param.sliderRB = 100;
+  param.startPosition = int16_t(50);
+  param.sliderDelay = 0;
+  // Draw the slider
+  slider.drawSlider(20, 160, param);
+  // Show bounding box (1 pixel outside slider working area)
+  int16_t x, y;    // x and y can be negative
+  uint16_t w, h;   // Width and height
+  slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+  //set slider correctly
+  //slider.setSliderPosition(90);
+  //delay(100);
+  slider.setSliderPosition(dutyCycle);
 
 }
 
@@ -255,13 +250,13 @@ void displayScreen3() {
 }
 
 void displayScreen4() {
-    tft.fillScreen(TFT_BLACK);
+  tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("File Explorer");
-    tft.setFreeFont(LABEL2_FONT);
+  tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
   screenButton.drawButton();
 
@@ -288,7 +283,7 @@ bool displayDeletionPrompt(String fileName) {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Delete file: ");
-    tft.setCursor(10, 55);
+  tft.setCursor(10, 55);
   tft.print(fileName);
   tft.setCursor(10, 90);
   tft.print("Are you sure?");
@@ -350,7 +345,6 @@ void displayFileContents(String fileName) {
   file.close();
 
   // Add a button to go back to the file explorer screen
-
   backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
   backButton.drawButton();
 
