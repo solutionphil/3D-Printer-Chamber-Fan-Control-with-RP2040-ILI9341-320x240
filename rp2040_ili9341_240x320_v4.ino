@@ -46,7 +46,7 @@ int currentScreen = 0;
 const int totalScreens = 5;
 
 // Labels for other buttons
-char nextButtonLabel[] = "Next"; // Define the button label as a mutable char array
+char backButtonLabel[] = "Back"; // Define the button label as a mutable char array
 char incButtonLabel[] = "Increase"; // Define the button label as a mutable char array
 char decButtonLabel[] = "Decrease"; // Define the button label as a mutable char array
 char yesLabel[] = "YES"; // Define the button label as a mutable char array
@@ -110,7 +110,7 @@ void loop(void) {
 
   // Switch to the next screen when the button is pressed
   if (screenButton.justPressed()) {
-    currentScreen = (currentScreen + 1) % totalScreens;
+    currentScreen = 0;
     displayScreen(currentScreen);
     delay(500);  // Debounce delay
   }
@@ -163,7 +163,7 @@ void displayScreen(int screen) {  // Update screen display logic
 
   // Draw the screen switch button
   tft.setFreeFont(LABEL2_FONT);
-  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
   backButton.initButton(&tft, 200, 280, 60, 30, TFT_WHITE, TFT_RED, TFT_WHITE, backLabel, 1); // Back button
 }
@@ -174,7 +174,7 @@ void displayScreen1() {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Screen 1");
-  backButton.drawButton();  // Draw back button
+
 }
 
 void displayScreen2() {
@@ -219,15 +219,12 @@ void displayScreen2() {
   // Draw the slider
   slider.drawSlider(20, 160, param);
 
-  // Draw scale for 10% increments
-  drawSliderScale(20, 160, param.slotLength, param.sliderLT, param.sliderRB);
-
   int16_t x, y;    // x and y can be negative
   uint16_t w, h;   // Width and height
   slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
   slider.setSliderPosition(dutyCycle);
-  backButton.drawButton();  // Add back button
+
 }
 
 void displayScreen3() {
@@ -244,7 +241,7 @@ void displayScreen3() {
   decreaseButton.initButton(&tft, 120, 250, 190, 80, TFT_WHITE, TFT_RED, TFT_WHITE, decButtonLabel, 1); 
   increaseButton.drawButton(); 
   decreaseButton.drawButton(); 
-  backButton.drawButton();  // Add back button
+
 }
 
 void displayScreen4() {
@@ -255,7 +252,7 @@ void displayScreen4() {
   tft.setCursor(10, 20);
   tft.print("File Explorer");
   tft.setFreeFont(LABEL2_FONT);
-  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
   // List files in SPIFFS
@@ -270,7 +267,7 @@ void displayScreen4() {
     fileButtons[i].drawButton();
     file = root.openNextFile();
     i++;
-    backButton.drawButton();  // Add back button to file explorer
+
   }
 }
 
@@ -430,13 +427,4 @@ void touch_calibrate() {
   }
 }
 
-// Function to draw scale for 10% increments
-void drawSliderScale(int x, int y, int length, int minValue, int maxValue) {
-  int stepCount = (maxValue - minValue) / 10; // Calculate number of steps
-  int stepSpacing = length / stepCount;      // Calculate spacing between steps
 
-  for (int i = 0; i <= stepCount; i++) {
-    int stepX = x + i * stepSpacing;
-    tft.drawLine(stepX, y - 5, stepX, y + 5, TFT_WHITE); // Draw tick mark
-  }
-}
