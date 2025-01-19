@@ -24,7 +24,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 
 // Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
-#define LABEL2_FONT &FreeSansBold12pt7b    // Key label font 2
+#define LABEL2_FONT &FreeSansBold9pt7b    // Key label font 2
 
 RP2040_PWM* PWM_Instance;
 
