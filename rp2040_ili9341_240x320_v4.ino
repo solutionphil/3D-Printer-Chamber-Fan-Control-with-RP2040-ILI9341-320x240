@@ -105,6 +105,7 @@ void loop(void) {
   }
 
   // Check for touch on the screen switch button
+  if(currentScreen!=0){
   screenButton.press(pressed && screenButton.contains(t_x, t_y));
   if (screenButton.justReleased()) screenButton.drawButton();
 
@@ -113,6 +114,7 @@ void loop(void) {
     currentScreen = 0;
     displayScreen(currentScreen);
     delay(500);  // Debounce delay
+  }
   }
 
   // Check for touch on brightness control buttons only on screen 3
@@ -162,10 +164,12 @@ void displayScreen(int screen) {  // Update screen display logic
   }
 
   // Draw the screen switch button
+  if(screen!=0){
   tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
-  backButton.initButton(&tft, 200, 280, 60, 30, TFT_WHITE, TFT_RED, TFT_WHITE, backLabel, 1); // Back button
+  //backButton.initButton(&tft, 200, 280, 60, 30, TFT_WHITE, TFT_RED, TFT_WHITE, backLabel, 1); // Back button
+  }
 }
 
 void displayScreen1() {
