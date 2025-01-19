@@ -25,7 +25,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 // Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
 #define LABEL2_FONT &FreeSansBold12pt7b    // Key label font 2
-b
+
 RP2040_PWM* PWM_Instance;
 
 float frequency = 1831;
@@ -89,6 +89,24 @@ void loop(void) {
         delay(500);  // Debounce delay
       }
     }
+  } else {
+    // Handle back button for all other screens
+    backButton.press(pressed && backButton.contains(t_x, t_y));
+    if (backButton.justReleased()) backButton.drawButton();
+    if (backButton.justPressed()) {
+      currentScreen = 0;  // Return to main menu
+      displayScreen(currentScreen);
+      delay(500);  // Debounce delay
+    }
+
+    for (uint8_t b = 0; b < 4; b++) {
+      if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
+      if (mainMenuButtons[b].justPressed()) {
+        currentScreen = b + 1;  // Navigate to the selected screen
+        displayScreen(currentScreen);  // Display the selected screen
+        delay(500);  // Debounce delay
+      }
+    }
   } else if (currentScreen == 2) {
     if (pressed) {
       if (slider.checkTouch(t_x, t_y)) {
@@ -118,7 +136,7 @@ void loop(void) {
   // Check for touch on brightness control buttons only on screen 3
   if (currentScreen == 3) {
     increaseButton.press(pressed && increaseButton.contains(t_x, t_y));
-    decreaseButton.press(pressed && decreaseButton.contains(t_x, t_y));
+    backButton.press(pressed && backButton.contains(t_x, t_y));
 
     // Handle brightness adjustment buttons
     if (increaseButton.justReleased()) increaseButton.drawButton();
@@ -126,6 +144,11 @@ void loop(void) {
 
     if (decreaseButton.justReleased()) decreaseButton.drawButton();
     if (decreaseButton.justPressed()) adjustBacklight(-10);  // Decrease brightness
+  }
+  if (backButton.justReleased()) backButton.drawButton();
+  if (backButton.justPressed()) {
+    currentScreen = 0;  // Return to main menu
+    displayScreen(currentScreen);
   }
 
   // Check for touch on file explorer buttons only on screen 4
@@ -136,6 +159,11 @@ void loop(void) {
       // Handle file button interactions
       if (fileButtons[i].justReleased()) fileButtons[i].drawButton();
       if (fileButtons[i].justPressed()) handleFileButtonPress(i);
+    }
+    if (backButton.justReleased()) backButton.drawButton();
+    if (backButton.justPressed()) {
+      currentScreen = 0;  // Return to main menu
+      displayScreen(currentScreen);
     }
   }
 }
@@ -343,14 +371,14 @@ void displayFileContents(String fileName) {
   file.close();
 
   // Add a button to go back to the file explorer screen
-  backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
-  backButton.drawButton();
+  back_Button.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
+  back_Button.drawButton();
 
   while (true) {
     uint16_t t_x = 0, t_y = 0;
     bool pressed = tft.getTouch(&t_x, &t_y);
 
-    backButton.press(pressed && backButton.contains(t_x, t_y));
+    back_Button.press(pressed && back_Button.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
       displayScreen4();
