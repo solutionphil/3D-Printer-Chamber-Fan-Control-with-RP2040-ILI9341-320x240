@@ -1,8 +1,8 @@
 /*
  * Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
- * Author: [Your Name]
- * Date: [Today's Date]
+ * Author: Solutionphil
+ * Date: 01/19/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
