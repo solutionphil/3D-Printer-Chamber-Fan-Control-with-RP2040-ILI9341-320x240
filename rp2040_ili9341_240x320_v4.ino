@@ -91,23 +91,9 @@ void loop(void) {
     }
   } else {
     // Handle back button for all other screens
-    backButton.press(pressed && backButton.contains(t_x, t_y));
-    if (backButton.justReleased()) backButton.drawButton();
-    if (backButton.justPressed()) {
-      currentScreen = 0;  // Return to main menu
-      displayScreen(currentScreen);
-      delay(500);  // Debounce delay
-    }
-
-    for (uint8_t b = 0; b < 4; b++) {
-      if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
-      if (mainMenuButtons[b].justPressed()) {
-        currentScreen = b + 1;  // Navigate to the selected screen
-        displayScreen(currentScreen);  // Display the selected screen
-        delay(500);  // Debounce delay
-      }
-    }
-  } else if (currentScreen == 2) {
+    handleBackButtonPress(t_x, t_y, pressed); // Use refactored function
+  }
+  if (currentScreen == 2) {
     if (pressed) {
       if (slider.checkTouch(t_x, t_y)) {
         // Handle slider touch logic
@@ -169,7 +155,9 @@ void loop(void) {
 }
 
 void displayScreen(int screen) {  // Update screen display logic
-  tft.fillScreen(TFT_BLACK);  // Clear the screen
+  if (screen != currentScreen) {
+    tft.fillScreen(TFT_BLACK);  // Clear the screen only if switching screens
+  }
 
   switch (screen) {
     case 0:
@@ -179,6 +167,7 @@ void displayScreen(int screen) {  // Update screen display logic
       displayScreen1();  // Display screen 1
       break;
     case 2:
+      tft.fillScreen(TFT_BLACK);  // Ensure brightness screen is cleared
       displayScreen2();
       break;
     case 3:
@@ -207,7 +196,6 @@ void displayScreen1() {
 
 void displayScreen2() {
   // Clear screen and set up title
-  tft.fillScreen(TFT_BLACK);
   
   // Ensure knob sprite is ready
   if (!knob.created()) knob.createSprite(30, 40);
@@ -351,9 +339,9 @@ void handleFileButtonPress(uint8_t index) {
 void displayFileContents(String fileName) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(LABEL2_FONT);
+  tft.set FreeFont(LABEL2_FONT);
   tft.setTextSize(1);
-  tft.setCursor(10, 20);
+  t ft.setCursor(10, 20);
   tft.print("File: ");
   tft.print(fileName);
 
@@ -371,19 +359,31 @@ void displayFileContents(String fileName) {
   file.close();
 
   // Add a button to go back to the file explorer screen
-  back_Button.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
-  back_Button.drawButton();
+  backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
+  backButton.drawButton();
 
   while (true) {
     uint16_t t_x = 0, t_y = 0;
     bool pressed = tft.getTouch(&t_x, &t_y);
 
-    back_Button.press(pressed && back_Button.contains(t_x, t_y));
+    backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
       displayScreen4();
       return;
     }
+  }
+}
+
+// Refactored repetitive back button logic into a reusable function
+void handleBackButtonPress(uint16_t t_x, uint16_t t_y, bool pressed) {
+  backButton.press(pressed && backButton.contains(t_x, t_y));
+  if (backButton.justReleased()) backButton.drawButton();
+  if (backButton.justPressed() && currentScreen != 0) {
+    tft.fillScreen(TFT_BLACK);  // Clear screen only when returning to main menu
+    currentScreen = 0;  // Return to main menu
+    displayScreen(currentScreen);
+    delay(500);  // Debounce delay
   }
 }
 
@@ -393,7 +393,9 @@ void adjustBacklight(int change) {
 }  // Adjust backlight brightness
 
 void drawMainMenu() {
-  tft.fillScreen(TFT_BLACK);
+  if (currentScreen != 0) {
+    tft.fillScreen(TFT_BLACK);  // Clear screen only if not already on main menu
+  }
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
