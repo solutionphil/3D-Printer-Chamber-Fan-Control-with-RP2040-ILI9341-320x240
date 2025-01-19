@@ -25,7 +25,7 @@ SliderWidget slider = SliderWidget(&tft, &knob);
 // Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
 #define LABEL2_FONT &FreeSansBold12pt7b    // Key label font 2
-
+b
 RP2040_PWM* PWM_Instance;
 
 float frequency = 1831;
@@ -343,14 +343,14 @@ void displayFileContents(String fileName) {
   file.close();
 
   // Add a button to go back to the file explorer screen
-  back_Button.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
-  back_Button.drawButton();
+  backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
+  backButton.drawButton();
 
   while (true) {
     uint16_t t_x = 0, t_y = 0;
     bool pressed = tft.getTouch(&t_x, &t_y);
 
-    back_Button.press(pressed && back_Button.contains(t_x, t_y));
+    backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
       displayScreen4();
