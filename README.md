@@ -1,4 +1,5 @@
- * Program Name: RP2040 TFT Touch UI with PWM Brightness Control
+ **********************************************************************************************************************************************************************************************
+ *  Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
  * Date: 01/20/2025
@@ -18,10 +19,11 @@
  * - TFT_eSPI: For TFT display control (by Bodmer)
  * - TFT_eWidget: For Slider Control (by Bodmer)
  * - RP2040_PWM: For PWM-based brightness control (by Khoi Hoang)
-   - 
+ *
+************************************************************************************************************************************************************************************************
 Instructions 
   1. Install the Libraries in the Arduino IDE 2.X
-  2. Install in Boardmanager the above mentioned Board
+  2. Install in the Arduino IDE 2.x Boardmanager the above mentioned Board
   3. Copy the files from the eSPI folder to your Arduino IDE working folder into /libraries/TFT_eSPI
   4. Download and Open the *.INO file in your Arduino IDE
   5. Compile and Upload (for first time uploading it`s necessary to press reset+boot and release the reset button. Your RP2040 Zero should be detected as an new drive in your operating system)
