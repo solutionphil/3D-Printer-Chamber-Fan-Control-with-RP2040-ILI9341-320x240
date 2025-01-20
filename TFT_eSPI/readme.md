@@ -17,6 +17,6 @@
 // T_DIN  						to RP2040 pin D3 (must be the same like Display SDI/MOSI)<br/>
 // T_CS  						to RP2040 pin D5 (can use another pin if desired, or GND, see below)<br/>
 // T_CLK  						to RP2040 pin D1 (must be the same like Display CS)<br/><br/>
-** Alternatively you can just rename the file to User_Setup.h. The downside is that on a loibrary Update your settings might be gone... <br/>
+** Alternatively you can just rename the file to User_Setup.h. The downside is that on an library update your settings might be gone... <br/>
 
 
