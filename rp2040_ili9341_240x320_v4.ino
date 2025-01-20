@@ -349,7 +349,7 @@ void handleFileButtonPress(uint8_t index) {
 
 void displayFileContents(String fileName) {
   tft.fillScreen(TFT_BLACK);
-  t ft.setTextColor(TFT_WHITE);
+  tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   tft.setCursor(10, 20);
