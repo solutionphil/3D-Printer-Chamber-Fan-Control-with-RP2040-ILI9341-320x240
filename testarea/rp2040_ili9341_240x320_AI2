@@ -1,40 +1,22 @@
 #include "FS.h"
 #include <SPI.h>
-#include <TFT_eSPI.h>      // Hardware-specific library
-
-/*******************************************************************************
- * Configuration and Pin Definitions
- ******************************************************************************/
-
-// Screen configuration
+#include <TFT_eSPI.h>
+#include <TFT_eWidget.h>
+#include "RP2040_PWM.h"
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
-
-/*******************************************************************************
- * Global Objects and Variables
- ******************************************************************************/
-
-#include <TFT_eWidget.h>      // Hardware-specific library
-#include "RP2040_PWM.h"    // PWM library
-
-#define _PWM_LOGLEVEL_        1
+#define _PWM_LOGLEVEL_ 1
 #define CALIBRATION_FILE "/TouchCalData1"
 #define REPEAT_CAL false
-#define pinToUse      7
-
-// Keypad parameters
+#define pinToUse 7
 #define KEY_X 45
 #define KEY_Y 90
 #define KEY_W 66
 #define KEY_H 40
-#define KEY_SPACING_X 10
-#define KEY_SPACING_Y 10
+#define KEY_SPACING_X 10    #define KEY_SPACING_Y 10
 #define KEY_TEXTSIZE 1
-
-// Display configuration
-#define DISPLAY_REFRESH_DELAY 100  // ms between screen updates
-#define TOUCH_DEBOUNCE_DELAY 50    // ms for touch debounce
-
+#define DISPLAY_REFRESH_DELAY 100
+#define TOUCH_DEBOUNCE_DELAY 50
 #define DISP_X 1
 #define DISP_Y 10
 #define DISP_W 238
@@ -44,8 +26,8 @@
 #define NUM_LEN 12
 #define STATUS_X 120
 #define STATUS_Y 65
-#define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
-#define LABEL2_FONT &FreeSansBold12pt7b // Key label font 2
+#define LABEL1_FONT &FreeSansOblique12pt7b
+#define LABEL2_FONT &FreeSansBold12pt7b
 
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 RP2040_PWM* PWM_Instance;
@@ -56,10 +38,10 @@ float dutyCycle = 90;
 char numberBuffer[NUM_LEN + 1] = "";
 uint8_t numberIndex = 0;
 
-char keyLabel[15][5] = {"New", "Del", "Send", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "#" };
-uint16_t keyColor[15] = {TFT_RED, TFT_BLACK, TFT_DARKGREEN, TFT_BLUE, TFT_BLUE, TFT_BLUE,
-                         TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE,
-                         TFT_BLUE, TFT_BLUE, TFT_BLUE};
+const char keyLabel[][5] = {"New", "Del", "Send", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "#" };
+const uint16_t keyColor[] = {TFT_RED, TFT_BLACK, TFT_DARKGREEN, TFT_BLUE, TFT_BLUE, TFT_BLUE,
+                             TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE, TFT_BLUE,
+                             TFT_BLUE, TFT_BLUE, TFT_BLUE};
 
 TFT_eSPI_Button key[15];  // Invoke the TFT_eSPI button class and create all the button objects
 TFT_eSPI_Button screenButton;  // Button to switch screens
@@ -72,14 +54,7 @@ TFT_eSPI_Button backButton;
 TFT_eSPI_Button yesButton;
 TFT_eSPI_Button noButton;
 
-// Screen state management
-enum ScreenState {
-    SCREEN_KEYPAD,
-    SCREEN_INFO,
-    SCREEN_SETTINGS,
-    SCREEN_BRIGHTNESS,
-    SCREEN_FILES
-};
+enum ScreenState {SCREEN_KEYPAD, SCREEN_INFO, SCREEN_SETTINGS, SCREEN_BRIGHTNESS, SCREEN_FILES};
 
 ScreenState currentScreen = SCREEN_KEYPAD;
 const int totalScreens = 5;
@@ -92,7 +67,6 @@ char backLabel[] = "Back"; // Define the button label as a mutable char array
 
 void setup() {
   Serial.begin(9600);  // Use serial port
-  // Initialize PWM for backlight
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
@@ -109,7 +83,6 @@ void loop(void) {
   bool pressed = tft.getTouch(&t_x, &t_y);  // Check for valid touch
   static uint32_t lastTouchTime = 0;  // For debouncing
    
-  // Implement touch debouncing
   if (pressed && (millis() - lastTouchTime) < TOUCH_DEBOUNCE_DELAY) {
     return;
   }
@@ -128,7 +101,6 @@ void loop(void) {
     }
   }
 
-  // Check for touch on the screen switch button
   screenButton.press(pressed && screenButton.contains(t_x, t_y));
   if (screenButton.justReleased()) screenButton.drawButton();
   if (screenButton.justPressed()) {
@@ -137,7 +109,6 @@ void loop(void) {
     delay(500);  // Debounce delay
   }
 
-  // Check for touch on brightness control buttons only on screen 3
   if (currentScreen == SCREEN_BRIGHTNESS) {
     increaseButton.press(pressed && increaseButton.contains(t_x, t_y));
     decreaseButton.press(pressed && decreaseButton.contains(t_x, t_y));
@@ -149,7 +120,6 @@ void loop(void) {
     if (decreaseButton.justPressed()) adjustBacklight(-10);  // Decrease brightness
   }
   
-  // Check for touch on file explorer buttons only on screen 4
   if (currentScreen == SCREEN_FILES) {
     for (uint8_t i = 0; i < 10; i++) {
       fileButtons[i].press(pressed && fileButtons[i].contains(t_x, t_y));
@@ -180,7 +150,6 @@ void displayScreen(int screen) {
       break;
   }
 
-  // Draw the screen switch button
   tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
   screenButton.drawButton();
@@ -192,7 +161,6 @@ void displayScreen1() {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Screen 1");
-  // Add more elements for Screen 1
 }
 
 void displayScreen2() {
@@ -201,7 +169,6 @@ void displayScreen2() {
   tft.setTextSize(1);
   tft.setCursor(10, 20);
   tft.print("Screen 2");
-  // Add more elements for Screen 2
 }
 
 void displayScreen3() {
@@ -210,8 +177,6 @@ void displayScreen3() {
   tft.setTextSize(1);
   tft.setCursor(10, 70);
   tft.print("Control Brightness");
-  // Add more elements for Screen 2
-  // Add brightness control buttons 
   tft.setFreeFont(LABEL2_FONT); 
 
   increaseButton.initButton(&tft, 120, 150, 190, 80, TFT_WHITE, TFT_GREEN, TFT_WHITE, incButtonLabel, 1); 
@@ -231,7 +196,6 @@ void displayScreen4() {
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, nextButtonLabel, 1);
   screenButton.drawButton();
 
-  // List files in SPIFFS
   File root = SPIFFS.open("/", "r");
   File file = root.openNextFile();
   uint8_t i = 0;
@@ -314,7 +278,6 @@ void displayFileContents(String fileName) {
   }
   file.close();
 
-  // Add a button to go back to the file explorer screen
   backButton.initButton(&tft, 120, 220, 80, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, backLabel, 1);
   backButton.drawButton();
 
