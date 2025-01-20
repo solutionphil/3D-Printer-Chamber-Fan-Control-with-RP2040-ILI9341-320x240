@@ -70,11 +70,12 @@ TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 int currentScreen = 0;
 const int totalScreens = 5;
 
-// Labels for other buttons
+// Labels for buttons
 char backButtonLabel[] = "Back"; // Define the button label as a mutable char array
 char yesLabel[] = "YES"; // Define the button label as a mutable char array
 char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
+char settingsLabels[3][20] = {"Brightness", "File Explorer", "Other Settings"};
 
 void setup() {
   // Initialize serial communication for debugging
@@ -116,9 +117,23 @@ void loop(void) {
     for (uint8_t b = 0; b < 5; b++) {
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
-        currentScreen = b + 1;  // Navigate to the selected screen
+        if (b < 2) {
+          currentScreen = b + 1;
+        } else {
+          currentScreen = 5;
+        }
         displayScreen(currentScreen);  // Display the selected screen
         delay(500);  // Debounce delay
+      }
+    }
+  } else if (currentScreen == 5) {
+    for (uint8_t b = 0; b < 3; b++) {
+      mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
+      if (mainMenuButtons[b].justPressed()) {
+        if (b == 0) currentScreen = 2;      // Brightness
+        else if (b == 1) currentScreen = 4;  // File Explorer
+        displayScreen(currentScreen);
+        delay(500);
       }
     }
   } else if (currentScreen == 2) {
@@ -204,13 +219,11 @@ void drawMainMenu() {
   menuSprite.print("Main Menu");
 
   // Initialize buttons with menuSprite instead of tft
-  mainMenuButtons[0].initButton(&menuSprite, 120, 90, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 1", 1);
-  mainMenuButtons[1].initButton(&menuSprite, 120, 140, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Brightness", 1);
-  mainMenuButtons[2].initButton(&menuSprite, 120, 190, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Control Brightness", 1);
-  mainMenuButtons[3].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"File Explorer", 1);
-  mainMenuButtons[4].initButton(&menuSprite, 120, 290, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Settings", 1);
+  mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 1", 1);
+  mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
+  mainMenuButtons[2].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
-  for (uint8_t i = 0; i < 5; i++) {
+  for (uint8_t i = 0; i < 3; i++) {
     mainMenuButtons[i].drawButton();
   }
   
@@ -310,11 +323,20 @@ void displayScreen4() {
 }
 
 void displayScreen5() {
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
-  tft.setCursor(10, 20);
-  tft.print("Screen 5");
+  menuSprite.fillSprite(TFT_BLACK);
+  menuSprite.setTextColor(TFT_WHITE);
+  menuSprite.setFreeFont(LABEL2_FONT);
+  menuSprite.setTextSize(1);
+  menuSprite.setCursor(10, 50);
+  menuSprite.print("Settings");
+
+  // Initialize settings menu buttons
+  for (int i = 0; i < 3; i++) {
+    mainMenuButtons[i].initButton(&menuSprite, 120, 100 + (i * 60), 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, settingsLabels[i], 1);
+    mainMenuButtons[i].drawButton();
+  }
+  
+  menuSprite.pushSprite(0, 0);
 }
 
 bool displayDeletionPrompt(String fileName) {
