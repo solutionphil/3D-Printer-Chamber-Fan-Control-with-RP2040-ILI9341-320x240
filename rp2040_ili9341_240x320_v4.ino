@@ -7,7 +7,7 @@
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
  * It provides a touch-based UI with multiple screens, PWM-based brightness control, and a file explorer
- * using SPIFFS. The program includes features like touch calibration, slider-based brightness adjustment,
+ * using LittleFS. The program includes features like touch calibration, slider-based brightness adjustment,
  * and file management.
  *
  * Hardware:
@@ -20,7 +20,7 @@
  * - RP2040_PWM: For PWM-based brightness control
  */
 
-#include "FS.h"
+#include <LittleFS.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
 #include <TFT_eWidget.h>  // Widget library for sliders
@@ -286,8 +286,8 @@ void displayScreen4() {
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
-  // List files in SPIFFS
-  File root = SPIFFS.open("/", "r");
+  // List files in LittleFS
+  File root = LittleFS.open("/", "r");
   File file = root.openNextFile();
   uint8_t i = 0;
   while (file && i < 10) {
@@ -338,8 +338,8 @@ bool displayDeletionPrompt(String fileName) {
 void handleFileButtonPress(uint8_t index) {
   String fileName = buttonLabels[index];
   if (displayDeletionPrompt(fileName)) {
-    if (SPIFFS.exists(fileName)) {
-      SPIFFS.remove(fileName);
+    if (LittleFS.exists(fileName)) {
+      LittleFS.remove(fileName);
     }
   } else {
     displayFileContents(fileName);  // Show file contents if deletion is canceled
@@ -356,7 +356,7 @@ void displayFileContents(String fileName) {
   tft.print("File: ");
   tft.print(fileName);
 
-  File file = SPIFFS.open(fileName, "r");
+  File file = LittleFS.open(fileName, "r");
   if (!file) {
     tft.setCursor(10, 50);
     tft.print("Failed to open file");
@@ -417,17 +417,17 @@ void touch_calibrate() {
   uint16_t calData[5];
   uint8_t calDataOK = 0;
 
-  if (!SPIFFS.begin()) {
+  if (!LittleFS.begin()) {
     Serial.println("formatting file system");
-    SPIFFS.format();
-    SPIFFS.begin();
+    LittleFS.format();
+    LittleFS.begin();
   }
 
-  if (SPIFFS.exists(CALIBRATION_FILE)) {
+  if (LittleFS.exists(CALIBRATION_FILE)) {
     if (REPEAT_CAL) {
-      SPIFFS.remove(CALIBRATION_FILE);
+      LittleFS.remove(CALIBRATION_FILE);
     } else {
-      File f = SPIFFS.open(CALIBRATION_FILE, "r");
+      File f = LittleFS.open(CALIBRATION_FILE, "r");
       if (f) {
         if (f.readBytes((char *)calData, 14) == 14) calDataOK = 1;
         f.close();
@@ -453,7 +453,7 @@ void touch_calibrate() {
     tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15);
     tft.setTextColor(TFT_GREEN, TFT_BLACK);
     tft.println("Calibration complete!");
-    File f = SPIFFS.open(CALIBRATION_FILE, "w");
+    File f = LittleFS.open(CALIBRATION_FILE, "w");
     if (f) {
       f.write((const unsigned char *)calData, 14);
       f.close();
