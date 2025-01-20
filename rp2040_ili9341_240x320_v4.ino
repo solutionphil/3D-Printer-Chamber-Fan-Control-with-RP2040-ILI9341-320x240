@@ -38,6 +38,7 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 #define CALIBRATION_FILE "/TouchCalData1"
 #define REPEAT_CAL false
 #define pinToUse      7
+#define BRIGHTNESS_FILE "/brightness.txt"
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -56,7 +57,7 @@ RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
 float frequency = 1831;
-float dutyCycle = 80;
+float dutyCycle = 90;  // Default brightness value
 
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button fileButtons[10]; // Buttons for file explorer
@@ -77,6 +78,26 @@ char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
 char settingsLabels[3][20] = {"Brightness", "File Explorer", "Other Settings"};
 
+void saveBrightness(float value) {
+  File f = LittleFS.open(BRIGHTNESS_FILE, "w");
+  if (f) {
+    f.println(value);
+    f.close();
+  }
+}
+
+float loadBrightness() {
+  if (LittleFS.exists(BRIGHTNESS_FILE)) {
+    File f = LittleFS.open(BRIGHTNESS_FILE, "r");
+    if (f) {
+      String val = f.readStringUntil('\n');
+      f.close();
+      return val.toFloat();
+    }
+  }
+  return 90.0; // Default brightness if file doesn't exist
+}
+
 void setup() {
   // Initialize serial communication for debugging
   Serial.begin(9600);  
@@ -84,6 +105,11 @@ void setup() {
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
 
+  // Initialize LittleFS and load saved brightness
+  if (!LittleFS.begin()) {
+    LittleFS.format();
+    LittleFS.begin();
+  }
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
 
@@ -91,6 +117,9 @@ void setup() {
   knob.setColorDepth(8);
   knob.createSprite(30, 40);  // Size for the slider knob
   knob.fillSprite(TFT_BLACK);
+
+  // Load saved brightness
+  dutyCycle = loadBrightness();
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
@@ -144,6 +173,7 @@ void loop(void) {
         dutyCycle = round(slider.getSliderPosition() / 10) * 10; // Snap to nearest 10% increment
         slider.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+        saveBrightness(dutyCycle);  // Save the new brightness value
         // Update percentage display
         tft.fillRect(90, 110, 80, 30, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
