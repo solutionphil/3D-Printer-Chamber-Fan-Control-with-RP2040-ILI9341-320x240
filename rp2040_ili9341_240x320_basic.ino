@@ -57,7 +57,7 @@ RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
 float frequency = 1831;
-float dutyCycle = 90;  // Default brightness value
+float dutyCycle; //= 90;  // Default brightness value
 
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button fileButtons[10]; // Buttons for file explorer
@@ -110,6 +110,9 @@ void setup() {
     LittleFS.format();
     LittleFS.begin();
   }
+    // Load saved brightness
+  dutyCycle = loadBrightness();
+  
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
 
@@ -118,8 +121,7 @@ void setup() {
   knob.createSprite(30, 40);  // Size for the slider knob
   knob.fillSprite(TFT_BLACK);
 
-  // Load saved brightness
-  dutyCycle = loadBrightness();
+
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
@@ -349,7 +351,7 @@ void displayScreen4() {
     String fileName = file.name();
     fileNames[i] = fileName; // Store file name in array
     buttonLabels[i] = fileName; // Store label in array
-    fileButtons[i].initButton(&tft, 120, 80 + i * 30, 200, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)fileName.c_str(), 1);
+    fileButtons[i].initButton(&tft, 120, 80 + i * 40, 200, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)fileName.c_str(), 1);
     fileButtons[i].drawButton();
     file = root.openNextFile();
     i++;
