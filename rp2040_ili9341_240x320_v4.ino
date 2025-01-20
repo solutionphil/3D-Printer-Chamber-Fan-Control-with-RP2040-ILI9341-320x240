@@ -117,10 +117,11 @@ void loop(void) {
     for (uint8_t b = 0; b < 5; b++) {
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
-        if (b < 2) {
-          currentScreen = b + 1;
-        } else {
-          currentScreen = 5;
+        switch(b) {
+          case 0: currentScreen = 1; break;  // Screen 1
+          case 1: currentScreen = 3; break;  // Screen 3
+          case 2: currentScreen = 5; break;  // Settings
+          default: break;
         }
         displayScreen(currentScreen);  // Display the selected screen
         delay(500);  // Debounce delay
@@ -158,7 +159,10 @@ void loop(void) {
 
   // Switch to the next screen when the button is pressed
   if (screenButton.justPressed()) {
-    currentScreen = 0;
+    // Return to settings screen for screens 2 and 4
+    if (currentScreen == 2 || currentScreen == 4) {
+      currentScreen = 5;
+    } else currentScreen = 0;
     displayScreen(currentScreen);
     delay(500);  // Debounce delay
   }
@@ -205,7 +209,7 @@ void displayScreen(int screen) {  // Update screen display logic
   tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
-  //backButton.initButton(&tft, 200, 280, 60, 30, TFT_WHITE, TFT_RED, TFT_WHITE, backLabel, 1); // Back button
+  
   }
 }
 
@@ -378,11 +382,12 @@ void handleFileButtonPress(uint8_t index) {
   if (displayDeletionPrompt(fileName)) {
     if (LittleFS.exists(fileName)) {
       LittleFS.remove(fileName);
+      displayScreen4();  // Immediately refresh screen after deletion
+      return;
     }
   } else {
     displayFileContents(fileName);  // Show file contents if deletion is canceled
   }
-  displayScreen4();  // Refresh the file explorer screen
 }
 
 void displayFileContents(String fileName) {
