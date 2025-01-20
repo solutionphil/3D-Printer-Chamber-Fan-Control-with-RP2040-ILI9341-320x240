@@ -76,7 +76,7 @@ char backButtonLabel[] = "Back"; // Define the button label as a mutable char ar
 char yesLabel[] = "YES"; // Define the button label as a mutable char array
 char noLabel[] = "NO"; // Define the button label as a mutable char array
 char backLabel[] = "Back"; // Define the button label as a mutable char array
-char settingsLabels[3][20] = {"Brightness", "File Explorer", "Other Settings"};
+char settingsLabels[2][20] = {"Light", "Files"};
 
 void saveBrightness(float value) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
@@ -365,7 +365,7 @@ void displayScreen5() {
   menuSprite.print("Settings");
 
   // Initialize settings menu buttons
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 2; i++) {
     mainMenuButtons[i].initButton(&menuSprite, 120, 100 + (i * 60), 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, settingsLabels[i], 1);
     mainMenuButtons[i].drawButton();
   }
@@ -457,12 +457,6 @@ void displayFileContents(String fileName) {
       return;
     }
   }
-}
-
-// Function to adjust backlight brightness
-void adjustBacklight(int change) {
-  dutyCycle = constrain(dutyCycle + change, 0, 100);
-  PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
 }
 
 void touch_calibrate() {
