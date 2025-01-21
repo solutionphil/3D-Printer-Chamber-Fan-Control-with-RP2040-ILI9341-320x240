@@ -258,7 +258,10 @@ void loop(void) {
         if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = currentTime;
           if (b == 0) currentScreen = 2;      // Brightness
-          else if (b == 1) currentScreen = 4;  // File Explorer
+          else if (b == 1) {  // File Explorer
+            displayLoadingScreen();
+            currentScreen = 4;
+          }
           else if (b == 2) currentScreen = 6;  // LED Control
           displayScreen(currentScreen);
         }
@@ -326,13 +329,26 @@ void loop(void) {
   }
 }
 
+void displayLoadingScreen() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  
+  const char* loadingText = "Loading Files";
+  tft.drawString(loadingText, 60, 140);
+  
+  // Faster animation with shorter delays
+  for(int i = 0; i < 3; i++) {
+    tft.drawString(".", 140 + (i * 10), 140);
+    delay(300);
+    yield(); // Prevent watchdog issues
+  }
+  delay(200); // Short pause before next screen
+}
+
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
-  
-  // Add delay for screen transitions to prevent accidental double transitions
-  if (screen == 5 || screen == 6) {
-    delay(50);
-  }
   
   if (neopixelState) {  // Only update NeoPixel if it's enabled
     setNeoPixelColor(screen);  // Update NeoPixel color
@@ -459,6 +475,9 @@ void displayScreen3() {
 
 void displayScreen4() {
   tft.fillScreen(TFT_BLACK);
+  // Additional delay specifically for file explorer to prevent immediate touch processing
+  delay(100);
+  
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
