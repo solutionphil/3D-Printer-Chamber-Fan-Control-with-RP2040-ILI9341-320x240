@@ -31,8 +31,6 @@
 // Debounce control
 unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
-unsigned long lastSettingsPress = 0;
-const unsigned long SETTINGS_DEBOUNCE = 300; // Slightly longer debounce for settings
 
 #define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
@@ -241,15 +239,11 @@ void loop(void) {
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
         if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
-          // Additional debounce check for settings button
-          if (b == 2 && (currentTime - lastSettingsPress < SETTINGS_DEBOUNCE)) {
-            return;
-          }
-          lastButtonPress = currentTime;
+          lastButtonPress = currentTime + 250; // Add extra delay for button presses
           switch(b) {
             case 0: currentScreen = 1; break;  // Screen 1
             case 1: currentScreen = 3; break;  // Screen 3
-            case 2: lastSettingsPress = currentTime; currentScreen = 5; break;  // Settings
+            case 2: currentScreen = 5; break;  // Settings
             default: break;
           }
           displayScreen(currentScreen);  // Display the selected screen
