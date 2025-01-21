@@ -28,6 +28,12 @@
 #include "RP2040_PWM.h"   // PWM library
 #include <Adafruit_NeoPixel.h>
 
+// Debounce control
+unsigned long lastButtonPress = 0;
+const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
+unsigned long lastSettingsPress = 0;
+const unsigned long SETTINGS_DEBOUNCE = 300; // Slightly longer debounce for settings
+
 #define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
@@ -233,25 +239,35 @@ void loop(void) {
     for (uint8_t b = 0; b < 5; b++) {
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
-        switch(b) {
-          case 0: currentScreen = 1; break;  // Screen 1
-          case 1: currentScreen = 3; break;  // Screen 3
-          case 2: currentScreen = 5; break;  // Settings
-          default: break;
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+          // Additional debounce check for settings button
+          if (b == 2 && (currentTime - lastSettingsPress < SETTINGS_DEBOUNCE)) {
+            return;
+          }
+          lastButtonPress = currentTime;
+          switch(b) {
+            case 0: currentScreen = 1; break;  // Screen 1
+            case 1: currentScreen = 3; break;  // Screen 3
+            case 2: lastSettingsPress = currentTime; currentScreen = 5; break;  // Settings
+            default: break;
+          }
+          displayScreen(currentScreen);  // Display the selected screen
         }
-        displayScreen(currentScreen);  // Display the selected screen
-        delay(500);  // Debounce delay
       }
     }
   } else if (currentScreen == 5) {
     for (uint8_t b = 0; b < 3; b++) {
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
       if (mainMenuButtons[b].justPressed()) {
-        if (b == 0) currentScreen = 2;      // Brightness
-        else if (b == 1) currentScreen = 4;  // File Explorer
-        else if (b == 2) currentScreen = 6;  // LED Control
-        displayScreen(currentScreen);
-        delay(500);
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = currentTime;
+          if (b == 0) currentScreen = 2;      // Brightness
+          else if (b == 1) currentScreen = 4;  // File Explorer
+          else if (b == 2) currentScreen = 6;  // LED Control
+          displayScreen(currentScreen);
+        }
       }
     }
   } else if (currentScreen == 6) {
@@ -287,18 +303,21 @@ void loop(void) {
 
   // Check for touch on the screen switch button
   if(currentScreen!=0){
-  screenButton.press(pressed && screenButton.contains(t_x, t_y));
-  if (screenButton.justReleased()) screenButton.drawButton();
+    screenButton.press(pressed && screenButton.contains(t_x, t_y));
+    if (screenButton.justReleased()) screenButton.drawButton();
 
-  // Switch to the next screen when the button is pressed
-  if (screenButton.justPressed()) {
-    // Return to settings screen for screens 2 and 4
-    if (currentScreen == 2 || currentScreen == 4) {
-      currentScreen = 5;
-    } else currentScreen = 0;
-    displayScreen(currentScreen);
-    delay(500);  // Debounce delay
-  }
+    // Switch to the next screen when the button is pressed
+    if (screenButton.justPressed()) {
+      unsigned long currentTime = millis();
+      if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+        lastButtonPress = currentTime;
+        // Return to settings screen for screens 2 and 4
+        if (currentScreen == 2 || currentScreen == 4) {
+          currentScreen = 5;
+        } else currentScreen = 0;
+        displayScreen(currentScreen);
+      }
+    }
   }
 
   // Check for touch on file explorer buttons only on screen 4
@@ -315,8 +334,14 @@ void loop(void) {
 
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
+  
+  // Add delay for screen transitions to prevent accidental double transitions
+  if (screen == 5 || screen == 6) {
+    delay(50);
+  }
+  
   if (neopixelState) {  // Only update NeoPixel if it's enabled
-   setNeoPixelColor(screen);  // Update NeoPixel color
+    setNeoPixelColor(screen);  // Update NeoPixel color
   }
 
   switch (screen) {
@@ -345,10 +370,9 @@ void displayScreen(int screen) {  // Update screen display logic
 
   // Draw the screen switch button
   if(screen!=0){
-  tft.setFreeFont(LABEL2_FONT);
-  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
-  screenButton.drawButton();
-  
+    tft.setFreeFont(LABEL2_FONT);
+    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+    screenButton.drawButton();
   }
 }
 
