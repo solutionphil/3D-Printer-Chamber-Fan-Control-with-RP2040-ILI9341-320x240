@@ -320,6 +320,8 @@ void loop(void) {
   // Check for touch on file explorer buttons only on screen 4
   if (currentScreen == 4) {
     // Clear any residual touch data to prevent accidental button presses
+    t_x=0;
+    t_y=0;
     while (tft.getTouch(&t_x, &t_y)) {}
 
     // Additional delay specifically for file explorer to prevent immediate touch processing
@@ -343,11 +345,11 @@ void displayLoadingScreen() {
   
   const char* loadingText = "Loading Files";
   tft.drawString(loadingText, 60, 140);
-  
+
   // Faster animation with shorter delays
   for(int i = 0; i < 3; i++) {
-    tft.drawString(".", 140 + (i * 10), 140);
-    delay(300);
+    tft.drawString(".", 180 + (i * 10), 140);
+    delay(150);
     yield(); // Prevent watchdog issues
   }
   delay(200); // Short pause before next screen
@@ -481,8 +483,6 @@ void displayScreen3() {
 
 void displayScreen4() {
   tft.fillScreen(TFT_BLACK);
-  // Clear any residual touch data to prevent accidental button presses
-  while (tft.getTouch(&t_x, &t_y)) {}
 
   // Additional delay specifically for file explorer to prevent immediate touch processing
   delay(100);
