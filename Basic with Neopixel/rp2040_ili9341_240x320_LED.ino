@@ -18,6 +18,7 @@
  * Libraries:
  * - TFT_eSPI: For TFT display control
  * - RP2040_PWM: For PWM-based brightness control
+ * - Adafruit_NeoPixel: For NeoPixel control
  */
 
 #include <LittleFS.h>
@@ -25,6 +26,23 @@
 #include <TFT_eSPI.h>      // Hardware-specific library
 #include <TFT_eWidget.h>  // Widget library for sliders
 #include "RP2040_PWM.h"   // PWM library
+#include <Adafruit_NeoPixel.h>
+
+#define LED_STATE_FILE "/led_state.txt"
+// Global variables and definitions
+bool neopixelState = false;  // Track NeoPixel state
+const int totalScreens = 6;  // Increase total screens
+char settingsLabels[3][20] = {"Light", "Files", "LED Control"};  // Add LED control option
+
+// LED control button labels
+char ledOnLabel[] = "Turn ON";
+char ledOffLabel[] = "Turn OFF";
+
+// Navigation and dialog button labels
+char backButtonLabel[] = "Back";
+char yesLabel[] = "Yes";
+char noLabel[] = "No";
+char backLabel[] = "Back";
 
 // Initialize TFT and slider objects
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -39,6 +57,14 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 #define REPEAT_CAL false
 #define pinToUse      7
 #define BRIGHTNESS_FILE "/brightness.txt"
+
+// NeoPixel definitions
+#define NEOPIXEL_PIN 16
+#define NUM_PIXELS 1
+
+// Initialize NeoPixel
+Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+uint32_t currentColor = 0;
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -69,14 +95,6 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
-const int totalScreens = 5;
-
-// Labels for buttons
-char backButtonLabel[] = "Back"; // Define the button label as a mutable char array
-char yesLabel[] = "YES"; // Define the button label as a mutable char array
-char noLabel[] = "NO"; // Define the button label as a mutable char array
-char backLabel[] = "Back"; // Define the button label as a mutable char array
-char settingsLabels[2][20] = {"Light", "Files"};
 
 void saveBrightness(float value) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
@@ -98,6 +116,58 @@ float loadBrightness() {
   return 90.0; // Default brightness if file doesn't exist
 }
 
+void saveLEDState(bool state) {
+  File f = LittleFS.open(LED_STATE_FILE, "w");
+  if (f) {
+    f.println(state ? "1" : "0");
+    f.close();
+  }
+}
+
+bool loadLEDState() {
+  if (LittleFS.exists(LED_STATE_FILE)) {
+    File f = LittleFS.open(LED_STATE_FILE, "r");
+    if (!f) {
+      return false;  // Return false if file can't be opened
+    }
+    String val = f.readStringUntil('\n');
+    f.close();
+    // Trim whitespace and compare exact string
+    val.trim();
+    return (val == "1");
+  }
+  return false; // Default LED state to OFF if file doesn't exist
+}
+
+void setNeoPixelColor(int screenNumber) {
+  if (!neopixelState) return; // Don't change colors if LED is off
+
+  switch(screenNumber) {
+    case 0: // Main Menu
+      pixels.setPixelColor(0, pixels.Color(0, 0, 255)); // Blue
+      break;
+    case 1: // Screen 1
+      pixels.setPixelColor(0, pixels.Color(255, 0, 0)); // Red
+      break;
+    case 2: // Brightness Screen
+      pixels.setPixelColor(0, pixels.Color(255, 255, 0)); // Yellow
+      break;
+    case 3: // Screen 3
+      pixels.setPixelColor(0, pixels.Color(0, 255, 0)); // Green
+      break;
+    case 4: // File Explorer
+      pixels.setPixelColor(0, pixels.Color(128, 0, 128)); // Purple
+      break;
+    case 5: // Settings
+      pixels.setPixelColor(0, pixels.Color(255, 128, 0)); // Orange
+      break;
+    case 6: // LED Control
+      pixels.setPixelColor(0, pixels.Color(255, 255, 255)); // White
+      break;
+  }
+  pixels.show();
+}
+
 void setup() {
   // Initialize serial communication for debugging
   Serial.begin(9600);  
@@ -110,9 +180,26 @@ void setup() {
     LittleFS.format();
     LittleFS.begin();
   }
-    // Load saved brightness
+  
+  // Initialize NeoPixel and load state before any operations
+  pixels.begin();
+  pixels.setBrightness(50);
+  delay(100); // Small delay for stable initialization
+
+  // Load saved brightness
   dutyCycle = loadBrightness();
   
+  // Load saved LED state
+  neopixelState = loadLEDState();
+  
+  // Apply LED state and show immediately
+  if (neopixelState) {
+    setNeoPixelColor(0); // Set initial color for main menu
+  } else {
+    pixels.setPixelColor(0, 0); // LED off
+  }
+  pixels.show();
+
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
 
@@ -120,8 +207,6 @@ void setup() {
   knob.setColorDepth(8);
   knob.createSprite(30, 40);  // Size for the slider knob
   knob.fillSprite(TFT_BLACK);
-
-
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
@@ -164,9 +249,25 @@ void loop(void) {
       if (mainMenuButtons[b].justPressed()) {
         if (b == 0) currentScreen = 2;      // Brightness
         else if (b == 1) currentScreen = 4;  // File Explorer
+        else if (b == 2) currentScreen = 6;  // LED Control
         displayScreen(currentScreen);
         delay(500);
       }
+    }
+  } else if (currentScreen == 6) {
+    mainMenuButtons[0].press(pressed && mainMenuButtons[0].contains(t_x, t_y));
+    if (mainMenuButtons[0].justPressed()) {
+      neopixelState = !neopixelState;
+      if (!neopixelState) {
+        pixels.setPixelColor(0, 0);
+      } else {
+        pixels.setPixelColor(0, pixels.Color(255, 255, 255));
+        setNeoPixelColor(currentScreen);
+      }
+      pixels.show();
+      saveLEDState(neopixelState);
+      displayLEDControl();
+      delay(500);
     }
   } else if (currentScreen == 2) {
     if (pressed) {
@@ -214,6 +315,9 @@ void loop(void) {
 
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
+  if (neopixelState) {  // Only update NeoPixel if it's enabled
+   setNeoPixelColor(screen);  // Update NeoPixel color
+  }
 
   switch (screen) {
     case 0:
@@ -233,6 +337,9 @@ void displayScreen(int screen) {  // Update screen display logic
       break;
     case 5:
       displayScreen5();  // Display Settings
+      break;
+    case 6:
+      displayLEDControl();  // Display LED Control screen
       break;
   }
 
@@ -367,12 +474,34 @@ void displayScreen5() {
   menuSprite.print("Settings");
 
   // Initialize settings menu buttons
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < 3; i++) {  // Changed from 2 to 3 for new LED control button
     mainMenuButtons[i].initButton(&menuSprite, 120, 100 + (i * 60), 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, settingsLabels[i], 1);
     mainMenuButtons[i].drawButton();
   }
   
   menuSprite.pushSprite(0, 0);
+}
+
+void displayLEDControl() {
+  bool currentState = neopixelState; // Store current state to detect changes
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  
+  // Draw LED status
+  tft.drawString("Status:", 30, 100);
+  tft.setTextColor(currentState ? TFT_GREEN : TFT_RED);
+  tft.drawString(currentState ? "ON" : "OFF", 120, 100);
+  
+  // Initialize toggle button
+  mainMenuButtons[0].initButton(&tft, 120, 160, 160, 40, TFT_WHITE, 
+    currentState ? TFT_RED : TFT_GREEN, 
+    TFT_WHITE, 
+    currentState ? ledOffLabel : ledOnLabel, 1);
+  mainMenuButtons[0].drawButton();
+  
+  // Redraw the back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
 }
 
 bool displayDeletionPrompt(String fileName) {
