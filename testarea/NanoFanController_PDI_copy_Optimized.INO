@@ -3,15 +3,15 @@
 #include <avr/wdt.h>
 #include <EEPROM.h>
 
-// Configuration constants
+// Optimize constants and reduce RAM usage
 #define SND A1
 #define SENSOR A7
 #define DUTY_MIN 96
 #define MAGIC "FANC3"
 #define I2C_ADDRESS 8
+#define FAN_MIN 0.0f
+#define FAN_MAX 1.0f
 
-// PID variables and constants
-double Setpoint = 0, Input = 0, Output = 0;
 const double aggKp = 4, aggKi = 0.2, aggKd = 1;
 const double consKp = 1, consKi = 0.05, consKd = 0.25;
 
@@ -25,25 +25,16 @@ const float SENSOR_CALIBRATION = 7.95f;
 int period = 1000;
 unsigned long time_now = 0;
 
-boolean manual = false;
-float temp = 0, temp2 = 20, speed = 0.3, speedTemp = 0.3, TempSpeed1 = 0.3, TempSpeed2 = 0.3, TempSpeed3 = 0.3;
+uint8_t manual = 0;
+float temp = 0, temp2 = 20, speed = 0.3;
+float fanSpeeds[3] = {0.3, 0.3, 0.3}; // Combines TempSpeed1/2/3
 
 // Control flags
-struct ControlFlags {
-  bool sndStatus = false;
-  bool manMod = false;
-  bool sollTempCTRL = false;
-  bool fanCTRL = false;
-  bool fan1CTRL = false;
-  bool fan2CTRL = false;
-  bool fan3CTRL = false;
-} flags;
-
-//Fan Mode & Fan Control Switch
-int FanSelect = 0;
-
-//PID
-//double Kp = 2, Ki = 0.5, Kd = 0.25;
+uint8_t flags = 0;  // Use bits instead of bools
+#define FLAG_SND (1 << 0)
+#define FLAG_MAN (1 << 1)
+#define FLAG_TEMP (1 << 2)
+#define FLAG_FAN (1 << 3)
 
 float avgTemp = 0;
 /*
@@ -94,8 +85,8 @@ void buildResponse(int queryLen) {
       break;
 
     case 0x02:
-      flags.sndStatus = frage[1];
-      if (flags.sndStatus) {
+      flags |= FLAG_SND;
+      if (flags & FLAG_SND) {
         digitalWrite(SND, HIGH);
         delay(100);
         digitalWrite(SND, LOW);
@@ -106,13 +97,13 @@ void buildResponse(int queryLen) {
 
     case 0x03:
       antwort[0] = 0x12;
-      antwort[1] = flags.sndStatus;
+      antwort[1] = (flags & FLAG_SND) ? 1 : 0;
       alaenge += 1;
       break;
 
     case 0x04:
-      flags.manMod = frage[1];
-      manual = !flags.manMod;
+      flags |= FLAG_MAN;
+      manual = !(flags & FLAG_MAN);
       break;
 
     case 0x06:
@@ -127,10 +118,10 @@ void buildResponse(int queryLen) {
       break;
 
     case 0x13:
-      flags.fanCTRL = frage[1];
-      if (flags.fanCTRL) {
+      flags |= FLAG_FAN;
+      if (flags & FLAG_FAN) {
         speed = speed + 0.1;
-      } else if (!flags.fanCTRL) {
+      } else if (!(flags & FLAG_FAN)) {
         speed = speed - 0.1;
       }
       break;
@@ -143,16 +134,16 @@ void buildResponse(int queryLen) {
 
     case 0x07:
       antwort[0] = 0x08;
-      memcpy(antwort + 1, &TempSpeed1, sizeof(TempSpeed1));
-      alaenge += sizeof(TempSpeed1);
+      memcpy(antwort + 1, &fanSpeeds[0], sizeof(fanSpeeds[0]));
+      alaenge += sizeof(fanSpeeds[0]);
       break;
 
     case 0x20:
-      flags.sollTempCTRL = frage[1];
-      if (flags.sollTempCTRL) {
+      flags |= FLAG_TEMP;
+      if (flags & FLAG_TEMP) {
         temp2 = temp2 + 1;
         Setpoint = (temp2 * SENSOR_CALIBRATION);
-      } else if (!flags.sollTempCTRL) {
+      } else if (!(flags & FLAG_TEMP)) {
         temp2 = temp2 - 1;
         Setpoint = (temp2 * SENSOR_CALIBRATION);
       }
@@ -160,14 +151,14 @@ void buildResponse(int queryLen) {
 
     case 0x22:
       antwort[0] = 0x23;
-      memcpy(antwort + 1, &TempSpeed2, sizeof(TempSpeed2));
-      alaenge += sizeof(TempSpeed2);
+      memcpy(antwort + 1, &fanSpeeds[1], sizeof(fanSpeeds[1]));
+      alaenge += sizeof(fanSpeeds[1]);
       break;
 
     case 0x24:
       antwort[0] = 0x25;
-      memcpy(antwort + 1, &TempSpeed3, sizeof(TempSpeed3));
-      alaenge += sizeof(TempSpeed3);
+      memcpy(antwort + 1, &fanSpeeds[2], sizeof(fanSpeeds[2]));
+      alaenge += sizeof(fanSpeeds[2]);
       break;
 
     default:
@@ -199,11 +190,11 @@ void printStatus() {
   Serial.print(F(",Temp:"));
   Serial.print(temp);
   Serial.print(F(",Fan1:"));
-  Serial.print(TempSpeed1 * 100.0f);
+  Serial.print(fanSpeeds[0] * 100.0f);
   Serial.print(F(",Fan2:"));
-  Serial.print(TempSpeed2 * 100.0f);
+  Serial.print(fanSpeeds[1] * 100.0f);
   Serial.print(F(",Fan3:"));
-  Serial.println(TempSpeed3 * 100.0f);
+  Serial.println(fanSpeeds[2] * 100.0f);
 }
 
 bool loadSettings() {
@@ -236,80 +227,15 @@ void saveSettings() {
   eepromWriteFloat(SENSOR_CALIBRATION);
 }
 
-void FansAllOff() {
-  OCR1A = (uint16_t)(320 * speed);  //set PWM width on pin 9
-  OCR1B = (uint16_t)(320 * speed);  //set PWM width on pin 10
-  OCR2B = (uint8_t)(79 * speed);    //set PWM width on pin 3
-}
-
-void SetFansAll() {
-  OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-  OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-  OCR2B = (uint8_t)(79 * TempSpeed3);    //set PWM width on pin 3
-}
-
-void SetFan1() {
-  OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-}
-
-void SetFan2() {
-  OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-}
-
-void SetFan3() {
-  OCR2B = (uint8_t)(79 * TempSpeed3);  //set PWM width on pin 3
-}
-
-void BoostFansAll() {
-  OCR1A = 320;
-  OCR1B = 320;
-  OCR2B = 79;
-  delay(1000);
-  OCR1A = 96;
-  OCR1B = 96;
-  OCR2B = 24;
-}
-
-void BoostFans12() {
-  OCR1A = 320;
-  OCR1B = 320;
-  delay(1000);
-  OCR1A = 96;
-  OCR1B = 96;
-}
-
-void BoostFans13() {
-  OCR1A = 320;
-  OCR2B = 79;
-  delay(1000);
-  OCR1A = 96;
-  OCR2B = 24;
-}
-
-void BoostFans23() {
-  OCR1B = 320;
-  OCR2B = 79;
-  delay(1000);
-  OCR1B = 96;
-  OCR2B = 24;
-}
-
-void BoostFan1() {
-  OCR1A = 320;
-  delay(1000);
-  OCR1A = 96;
-}
-
-void BoostFan2() {
-  OCR1B = 320;
-  delay(1000);
-  OCR1B = 96;
-}
-
-void BoostFan3() {
-  OCR2B = 79;
-  delay(1000);
-  OCR2B = 24;
+// Combine fan control functions
+void setFanSpeed(uint8_t fan, float speed) {
+  speed = constrain(speed, FAN_MIN, FAN_MAX);
+  switch(fan) {
+    case 0: OCR1A = (uint16_t)(320 * speed); break;
+    case 1: OCR1B = (uint16_t)(320 * speed); break;
+    case 2: OCR2B = (uint8_t)(79 * speed); break;
+  }
+  if(fan < 3) fanSpeeds[fan] = speed;
 }
 
 void setup() {
@@ -417,257 +343,239 @@ void loop() {
       temp = (float)Input / SENSOR_CALIBRATION;
       raw = 320 / 1024 * Output;
 
-      OCR1A = (uint16_t)(320 * raw);  //set PWM width on pin 9
-      OCR1B = (uint16_t)(320 * raw);  //set PWM width on pin 10
-      OCR2B = (uint8_t)(79 * raw);    //set PWM width on pin 3
+      setFanSpeed(0, raw);  //set PWM width on pin 9
+      setFanSpeed(1, raw);  //set PWM width on pin 10
+      setFanSpeed(2, raw);    //set PWM width on pin 3
     }
     /////////////////////////////////////////////////////////////////////////
     /////////////////////            Manual Control           ///////////////
     /////////////////////////////////////////////////////////////////////////
   } else {
     if (FanSelect == 0) {
-      TempSpeed1 = 0.3;
-      TempSpeed2 = 0.3;
-      TempSpeed3 = 0.3;
-      OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-      OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-      OCR2B = (uint8_t)(79 * TempSpeed3);    //set PWM width on pin 3
+      fanSpeeds[0] = 0.3;
+      fanSpeeds[1] = 0.3;
+      fanSpeeds[2] = 0.3;
+      setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
+      setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
+      setFanSpeed(2, fanSpeeds[2]);    //set PWM width on pin 3
     }
 
     if (FanSelect == 1) {
       if (speed < 0) { speed = 0.00; }
       if (speed > 1.00) { speed = 1.00; }
-      if (TempSpeed1 > 1.00) { TempSpeed1 = 1.00; }
-      if (TempSpeed2 > 1.00) { TempSpeed2 = 1.00; }
-      if (TempSpeed3 > 1.00) { TempSpeed3 = 1.00; }
-      if (TempSpeed1 < 0) { TempSpeed1 = 0.00; }
-      if (TempSpeed2 < 0) { TempSpeed2 = 0.00; }
-      if (TempSpeed3 < 0) { TempSpeed3 = 0.00; }
+      if (fanSpeeds[0] > 1.00) { fanSpeeds[0] = 1.00; }
+      if (fanSpeeds[1] > 1.00) { fanSpeeds[1] = 1.00; }
+      if (fanSpeeds[2] > 1.00) { fanSpeeds[2] = 1.00; }
+      if (fanSpeeds[0] < 0) { fanSpeeds[0] = 0.00; }
+      if (fanSpeeds[1] < 0) { fanSpeeds[1] = 0.00; }
+      if (fanSpeeds[2] < 0) { fanSpeeds[2] = 0.00; }
 
-      //-10%
-      if (speed < speedTemp) {
-        TempSpeed1 = TempSpeed1 - 0.1;
-        TempSpeed2 = TempSpeed2 - 0.1;
-        TempSpeed3 = TempSpeed3 - 0.1;
-        SetFansAll();
-        Serial.println(speed);
-        Serial.println(TempSpeed1);
-        Serial.println(TempSpeed2);
-        Serial.println(TempSpeed3);
-        speedTemp = speed;
-      }
-      //+10%
-      if (speed > speedTemp) {
-        TempSpeed1 = TempSpeed1 + 0.1;
-        TempSpeed2 = TempSpeed2 + 0.1;
-        TempSpeed3 = TempSpeed3 + 0.1;
-        SetFansAll();
-        Serial.println(speed);
-        Serial.println(TempSpeed1);
-        Serial.println(TempSpeed2);
-        Serial.println(TempSpeed3);
-        speedTemp = speed;
+      float speedDiff = speed - fanSpeeds[0];
+      if (abs(speedDiff) > 0.01) {
+        for(uint8_t i = 0; i < 3; i++) {
+          setFanSpeed(i, fanSpeeds[i] + (speedDiff > 0 ? 0.1 : -0.1));
+        }
       }
 
       //ALL Off
-      if (((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+      if (((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
         Serial.println("Aktuell: ");
         Serial.println(speed);
         Serial.println("");
         speed = 0.00;
-        TempSpeed1 = 0.00;
-        TempSpeed2 = 0.00;
-        TempSpeed3 = 0.00;
-        OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-        OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-        OCR2B = (uint8_t)(79 * TempSpeed3);    //set PWM width on pin 3
+        fanSpeeds[0] = 0.00;
+        fanSpeeds[1] = 0.00;
+        fanSpeeds[2] = 0.00;
+        setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
+        setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
+        setFanSpeed(2, fanSpeeds[2]);    //set PWM width on pin 3
 
         Serial.println(speed);
-        Serial.println(TempSpeed1);
-        Serial.println(TempSpeed2);
-        Serial.println(TempSpeed3);
+        Serial.println(fanSpeeds[0]);
+        Serial.println(fanSpeeds[1]);
+        Serial.println(fanSpeeds[2]);
 
         speedTemp = speed;
       }
       // FAN1 off
-      if (((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) || ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) || ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
-        if (((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((!TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((!TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+      if (((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) || ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) || ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
+        if (((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((!fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((!fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
-          TempSpeed1 = 0.00;
-          OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
+          fanSpeeds[0] = 0.00;
+          setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
           Serial.println(speed);
-          Serial.println(TempSpeed1);
+          Serial.println(fanSpeeds[0]);
 
           speedTemp = speed;
         }
         ///FAN2 off
-        if (((!TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((!TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+        if (((!fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((!fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
-          TempSpeed2 = 0.00;
-          OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 9
+          fanSpeeds[1] = 0.00;
+          setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
           Serial.println(speed);
-          Serial.println(TempSpeed2);
+          Serial.println(fanSpeeds[1]);
 
           speedTemp = speed;
         }
         //FAN3 off
-        if (((!TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((!TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+        if (((!fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((!fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
-          TempSpeed3 = 0.00;
-          OCR2B = (uint8_t)(79 * TempSpeed3);  //set PWM width on pin 3
+          fanSpeeds[2] = 0.00;
+          setFanSpeed(2, fanSpeeds[2]);  //set PWM width on pin 3
           Serial.println(speed);
-          Serial.println(TempSpeed3);
+          Serial.println(fanSpeeds[2]);
 
           speedTemp = speed;
         }
         ///FAN 1 & 2 off
-        if (((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((!TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+        if (((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((!fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
-          TempSpeed1 = 0.00;
-          TempSpeed2 = 0.00;
+          fanSpeeds[0] = 0.00;
+          fanSpeeds[1] = 0.00;
 
-          OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-          OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
+          setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
+          setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
 
           Serial.println(speed);
-          Serial.println(TempSpeed1);
-          Serial.println(TempSpeed2);
+          Serial.println(fanSpeeds[0]);
+          Serial.println(fanSpeeds[1]);
 
           speedTemp = speed;
         }
         ////// FAN 1& 3 off
-        if (((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((!TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+        if (((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((!fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
-          TempSpeed1 = 0.00;
-          TempSpeed2 = 0.00;
+          fanSpeeds[0] = 0.00;
+          fanSpeeds[1] = 0.00;
 
-          OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-          OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
+          setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
+          setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
 
           Serial.println(speed);
-          Serial.println(TempSpeed1);
-          Serial.println(TempSpeed2);
+          Serial.println(fanSpeeds[0]);
+          Serial.println(fanSpeeds[1]);
 
           speedTemp = speed;
         }
         /////FAN 2 & 3 off
-        if (((!TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) && ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) && ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1))) {
+        if (((!fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) && ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) && ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1))) {
           Serial.println("Aktuell: ");
           Serial.println(speed);
           Serial.println("");
           speed = 0.00;
 
-          TempSpeed2 = 0.00;
-          TempSpeed3 = 0.00;
+          fanSpeeds[1] = 0.00;
+          fanSpeeds[2] = 0.00;
 
-          OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-          OCR2B = (uint8_t)(79 * TempSpeed3);    //set PWM width on pin 3
+          setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
+          setFanSpeed(2, fanSpeeds[2]);    //set PWM width on pin 3
 
           Serial.println(speed);
 
-          Serial.println(TempSpeed2);
-          Serial.println(TempSpeed3);
+          Serial.println(fanSpeeds[1]);
+          Serial.println(fanSpeeds[2]);
 
           speedTemp = speed;
         }
       }
       // Boost All Fans
-      if ((TempSpeed1 == 0.1) || (TempSpeed2 == 0.1) || (TempSpeed3 == 0.1)) {
-        if ((TempSpeed1 == 0.1) && (TempSpeed2 != 0.1) && (TempSpeed3 != 0.1)) {
+      if ((fanSpeeds[0] == 0.1) || (fanSpeeds[1] == 0.1) || (fanSpeeds[2] == 0.1)) {
+        if ((fanSpeeds[0] == 0.1) && (fanSpeeds[1] != 0.1) && (fanSpeeds[2] != 0.1)) {
           BoostFan1();
           speed = 0.3;
-          TempSpeed1 = speed;
+          fanSpeeds[0] = speed;
 
-          TempSpeed1 = 0.3;
-          SetFan1();
+          fanSpeeds[0] = 0.3;
+          setFanSpeed(0, fanSpeeds[0]);
           speedTemp = speed;
         }
-        if ((TempSpeed1 == 0.1) && (TempSpeed2 == 0.1) && (TempSpeed3 != 0.1)) {
+        if ((fanSpeeds[0] == 0.1) && (fanSpeeds[1] == 0.1) && (fanSpeeds[2] != 0.1)) {
           BoostFans12();
           speed = 0.3;
-          TempSpeed1 = speed;
-          TempSpeed2 = speed;
+          fanSpeeds[0] = speed;
+          fanSpeeds[1] = speed;
 
-          TempSpeed2 = 0.3;
-          TempSpeed1 = 0.3;
-          SetFan1();
-          SetFan2();
+          fanSpeeds[1] = 0.3;
+          fanSpeeds[0] = 0.3;
+          setFanSpeed(0, fanSpeeds[0]);
+          setFanSpeed(1, fanSpeeds[1]);
           speedTemp = speed;
         }
-        if ((TempSpeed1 == 0.1) && (TempSpeed2 != 0.1) && (TempSpeed3 == 0.1)) {
+        if ((fanSpeeds[0] == 0.1) && (fanSpeeds[1] != 0.1) && (fanSpeeds[2] == 0.1)) {
           BoostFans13();
           speed = 0.3;
-          TempSpeed1 = speed;
-          TempSpeed3 = speed;
-          TempSpeed1 = 0.3;
+          fanSpeeds[0] = speed;
+          fanSpeeds[2] = speed;
+          fanSpeeds[0] = 0.3;
 
-          TempSpeed3 = 0.3;
-          TempSpeed1 = 0.3;
-          SetFan3();
-          SetFan1();
+          fanSpeeds[2] = 0.3;
+          fanSpeeds[0] = 0.3;
+          setFanSpeed(0, fanSpeeds[0]);
+          setFanSpeed(2, fanSpeeds[2]);
           speedTemp = speed;
         }
-        if ((TempSpeed1 != 0.1) && (TempSpeed2 == 0.1) && (TempSpeed3 != 0.1)) {
+        if ((fanSpeeds[0] != 0.1) && (fanSpeeds[1] == 0.1) && (fanSpeeds[2] != 0.1)) {
           BoostFan2();
           speed = 0.3;
-          TempSpeed2 = speed;
+          fanSpeeds[1] = speed;
 
-          TempSpeed2 = 0.3;
-          SetFan2();
+          fanSpeeds[1] = 0.3;
+          setFanSpeed(1, fanSpeeds[1]);
           speedTemp = speed;
         }
-        if ((TempSpeed1 != 0.1) && (TempSpeed2 == 0.1) && (TempSpeed3 == 0.1)) {
+        if ((fanSpeeds[0] != 0.1) && (fanSpeeds[1] == 0.1) && (fanSpeeds[2] == 0.1)) {
           BoostFans23();
           speed = 0.3;
-          TempSpeed2 = speed;
-          TempSpeed3 = speed;
+          fanSpeeds[1] = speed;
+          fanSpeeds[2] = speed;
 
-          TempSpeed3 = 0.3;
-          TempSpeed2 = 0.3;
-          SetFan3();
-          SetFan2();
+          fanSpeeds[2] = 0.3;
+          fanSpeeds[1] = 0.3;
+          setFanSpeed(1, fanSpeeds[1]);
+          setFanSpeed(2, fanSpeeds[2]);
           speedTemp = speed;
         }
-        if ((TempSpeed1 != 0.1) && (TempSpeed2 != 0.1) && (TempSpeed3 == 0.1)) {
+        if ((fanSpeeds[0] != 0.1) && (fanSpeeds[1] != 0.1) && (fanSpeeds[2] == 0.1)) {
           BoostFan3();
           speed = 0.3;
 
-          TempSpeed3 = speed;
+          fanSpeeds[2] = speed;
 
-          TempSpeed3 = 0.3;
-          SetFan3();
+          fanSpeeds[2] = 0.3;
+          setFanSpeed(2, fanSpeeds[2]);
           speedTemp = speed;
         }
       }
 
-      if ((TempSpeed1 == 0.1) && (TempSpeed2 == 0.1) && (TempSpeed3 == 0.1)) {
+      if ((fanSpeeds[0] == 0.1) && (fanSpeeds[1] == 0.1) && (fanSpeeds[2] == 0.1)) {
         BoostFansAll();
         speed = 0.30;
-        TempSpeed1 = speed;
-        TempSpeed2 = speed;
-        TempSpeed3 = speed;
-        OCR1A = (uint16_t)(320 * TempSpeed1);  //set PWM width on pin 9
-        OCR1B = (uint16_t)(320 * TempSpeed2);  //set PWM width on pin 10
-        OCR2B = (uint8_t)(79 * TempSpeed3);    //set PWM width on pin 3
+        fanSpeeds[0] = speed;
+        fanSpeeds[1] = speed;
+        fanSpeeds[2] = speed;
+        setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
+        setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
+        setFanSpeed(2, fanSpeeds[2]);    //set PWM width on pin 3
         Serial.println(speed);
-        Serial.println(TempSpeed1);
-        Serial.println(TempSpeed2);
-        Serial.println(TempSpeed3);
+        Serial.println(fanSpeeds[0]);
+        Serial.println(fanSpeeds[1]);
+        Serial.println(fanSpeeds[2]);
         speedTemp = speed;
       }
     }
@@ -675,22 +583,22 @@ void loop() {
     if (FanSelect == 2) {
       if (speed < 0) { speed = 0.00; }
       if (speed > 1.00) { speed = 1.00; }
-      if (TempSpeed1 > 1.00) { TempSpeed1 = 1.00; }
-      if (TempSpeed1 < 0) { TempSpeed1 = 0.00; }
+      if (fanSpeeds[0] > 1.00) { fanSpeeds[0] = 1.00; }
+      if (fanSpeeds[0] < 0) { fanSpeeds[0] = 0.00; }
 
-      TempSpeed1 = speed;
-      SetFan1();  //set PWM width on pin 9
+      fanSpeeds[0] = speed;
+      setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 9
       speedTemp = speed;
-      if ((TempSpeed1 < 0.29) && (TempSpeed1 > 0.1)) {
+      if ((fanSpeeds[0] < 0.29) && (fanSpeeds[0] > 0.1)) {
         speed = 0.0;
-        TempSpeed1 = 0.0;
-        SetFan1();  //set PWM width on pin 3
+        fanSpeeds[0] = 0.0;
+        setFanSpeed(0, fanSpeeds[0]);  //set PWM width on pin 3
         speedTemp = speed;
       }
-      if (TempSpeed1 == 0.1) {
+      if (fanSpeeds[0] == 0.1) {
         BoostFan1();
         speed = 0.3;
-        TempSpeed1 = speed;
+        fanSpeeds[0] = speed;
       }
     }
 
@@ -698,45 +606,45 @@ void loop() {
       if (speed < 0) { speed = 0.00; }
       if (speed > 1.00) { speed = 1.00; }
 
-      if (TempSpeed2 > 1.00) { TempSpeed2 = 1.00; }
-      if (TempSpeed2 < 0) { TempSpeed2 = 0.00; }
+      if (fanSpeeds[1] > 1.00) { fanSpeeds[1] = 1.00; }
+      if (fanSpeeds[1] < 0) { fanSpeeds[1] = 0.00; }
 
-      TempSpeed2 = speed;
-      SetFan2();  //set PWM width on pin 10
+      fanSpeeds[1] = speed;
+      setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 10
       speedTemp = speed;
-      if ((TempSpeed2 < 0.29) && (TempSpeed2 > 0.1)) {
-        TempSpeed2 = 0.0;
+      if ((fanSpeeds[1] < 0.29) && (fanSpeeds[1] > 0.1)) {
+        fanSpeeds[1] = 0.0;
         speed = 0.0;
-        SetFan2();  //set PWM width on pin 3
+        setFanSpeed(1, fanSpeeds[1]);  //set PWM width on pin 3
         speedTemp = speed;
       }
-      if (TempSpeed2 == 0.1) {
+      if (fanSpeeds[1] == 0.1) {
         BoostFan2();
         speed = 0.3;
-        TempSpeed2 = speed;
+        fanSpeeds[1] = speed;
       }
     }
     if (FanSelect == 4) {
       if (speed < 0) { speed = 0.00; }
       if (speed > 1.00) { speed = 1.00; }
 
-      if (TempSpeed3 > 1.00) { TempSpeed3 = 1.00; }
-      if (TempSpeed3 < 0) { TempSpeed3 = 0.00; }
+      if (fanSpeeds[2] > 1.00) { fanSpeeds[2] = 1.00; }
+      if (fanSpeeds[2] < 0) { fanSpeeds[2] = 0.00; }
 
-      TempSpeed3 = speed;
-      SetFan3();  //set PWM width on pin 3
+      fanSpeeds[2] = speed;
+      setFanSpeed(2, fanSpeeds[2]);  //set PWM width on pin 3
       speedTemp = speed;
 
-      if ((TempSpeed3 < 0.29) && (TempSpeed3 > 0.1)) {
-        TempSpeed3 = 0.0;
+      if ((fanSpeeds[2] < 0.29) && (fanSpeeds[2] > 0.1)) {
+        fanSpeeds[2] = 0.0;
         speed = 0.0;
-        SetFan3();
+        setFanSpeed(2, fanSpeeds[2]);
         speedTemp = speed;
       }
-      if (TempSpeed3 == 0.1) {
+      if (fanSpeeds[2] == 0.1) {
         BoostFan3();
         speed = 0.3;
-        TempSpeed3 = speed;
+        fanSpeeds[2] = speed;
       }
     }
   }
