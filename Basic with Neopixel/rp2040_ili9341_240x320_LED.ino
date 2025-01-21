@@ -319,6 +319,12 @@ void loop(void) {
 
   // Check for touch on file explorer buttons only on screen 4
   if (currentScreen == 4) {
+    // Clear any residual touch data to prevent accidental button presses
+    while (tft.getTouch(&t_x, &t_y)) {}
+
+    // Additional delay specifically for file explorer to prevent immediate touch processing
+    delay(100);
+
     for (uint8_t i = 0; i < 10; i++) {
       fileButtons[i].press(pressed && fileButtons[i].contains(t_x, t_y));
 
@@ -475,6 +481,9 @@ void displayScreen3() {
 
 void displayScreen4() {
   tft.fillScreen(TFT_BLACK);
+  // Clear any residual touch data to prevent accidental button presses
+  while (tft.getTouch(&t_x, &t_y)) {}
+
   // Additional delay specifically for file explorer to prevent immediate touch processing
   delay(100);
   
