@@ -75,8 +75,6 @@ uint32_t currentColor = 0;
 // I2C pins
 #define I2C0_SDA 8
 #define I2C0_SCL 9
-#define I2C1_SDA 10
-#define I2C1_SCL 11
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -188,8 +186,6 @@ void setup() {
   Serial.begin(9600);  
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
-  Wire.setSDA(I2C1_SDA);
-  Wire.setSCL(I2C1_SCL);
   Wire.begin();
 
   // Initialize menu sprite
@@ -805,41 +801,6 @@ void displayInfoScreen() {
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
     tft.setCursor(20, 230);
-    tft.print("No devices found");
-  }
-  
-    // I2C Device Detection
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 260);
-  tft.print("I2C1 Devices:");
-  
-  // Scan I2C
-  bool foundDevice = false;
-  int yPos = 280;
-  delay(10);  // Small delay before I2C scan
-  
-  for (byte address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    byte error = Wire.endTransmission();
-    
-    if (error == 0) {
-      if (!foundDevice) {
-        foundDevice = true;
-      }
-      tft.setTextColor(TFT_GREEN);
-      tft.setCursor(20, yPos);
-      tft.print("0x");
-      if (address < 16) tft.print("0");
-      tft.print(address, HEX);
-      yPos += 20;
-      
-      if (yPos > 300) break; // Prevent overflow
-    }
-  }
-  
-  if (!foundDevice) {
-    tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 280);
     tft.print("No devices found");
   }
   
