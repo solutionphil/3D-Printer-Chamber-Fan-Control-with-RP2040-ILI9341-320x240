@@ -793,7 +793,7 @@ void displayInfoScreen() {
 
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 230);
+    tft.setCursor(20, 210);
     tft.print("No devices found");
   }
   
