@@ -745,7 +745,7 @@ void displayInfoScreen() {
 
   // I2C Device Detection
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 210);
+  tft.setCursor(10, 190);
   tft.print("I2C0 Devices:");
   tft.setCursor(10, 260);
   tft.print("I2C1 Devices:");
@@ -753,7 +753,7 @@ void displayInfoScreen() {
   // Scan both I2C buses
   bool foundDevice = false;
   bool foundDevice1 = false;
-  int yPos = 230;
+  int yPos = 210;
   delay(10);  // Small delay before I2C scan
   
   // Scan I2C0
@@ -782,7 +782,7 @@ void displayInfoScreen() {
     if (error == 0) {
       if (!foundDevice1) foundDevice1 = true;
       tft.setTextColor(TFT_GREEN);
-      tft.setCursor(130, yPos);
+      tft.setCursor(20, yPos);
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
@@ -799,7 +799,7 @@ void displayInfoScreen() {
   
   if (!foundDevice1) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(130, 280);
+    tft.setCursor(20, 280);
     tft.print("No devices found");
   }
 }
