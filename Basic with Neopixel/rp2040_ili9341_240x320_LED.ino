@@ -75,9 +75,9 @@ uint32_t currentColor = 0;
 // I2C pins
 #define I2C0_SDA 8
 #define I2C0_SCL 9
-// I2C pins
-#define I2C1_SDA 10
-#define I2C1_SCL 11
+
+#define I2C1_SDA 10  // Second I2C SDA pin
+#define I2C1_SCL 11  // Second I2C SCL pin
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -187,10 +187,14 @@ void setNeoPixelColor(int screenNumber) {
 void setup() {
   // Initialize serial communication for debugging
   Serial.begin(9600);  
+  // Initialize I2C0
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
   Wire.begin();
   
+  // Initialize I2C1 with proper constructor
+  TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
+  Wire1.begin();
 
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
@@ -738,76 +742,64 @@ void displayInfoScreen() {
     file.close();
   }
   tft.print(fileCount);
-  
-  // Display storage information
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 170);
-  tft.print("Storage Used: ");
-  
-  // Calculate total used bytes by iterating through files
-  root.close();  // Close the previous root handle
-  root = LittleFS.open("/", "r");  // Reopen root for second iteration
-  size_t usedBytes = 0;
-  while (File file = root.openNextFile()) {
-    if (file) {  // Add null check
-      usedBytes += file.size();
-      file.close();
-    }
-  }
-  root.close();
-  
-  // RP2040 flash size is typically 2MB, with some reserved for program
-  // Assuming 1MB available for LittleFS
-  const size_t totalBytes = 1024 * 1024; 
-  
-  tft.setTextColor(TFT_GREEN);
-  tft.print(usedBytes / 1024);
-  tft.print("/");
-  tft.print(totalBytes / 1024);
-  tft.print(" KB");
-  
-  // Display usage percentage
-  int usagePercent = (usedBytes * 100) / totalBytes;
-  tft.setCursor(10, 190);
-  tft.print("Usage: ");
-  tft.print(usagePercent);
-  tft.print("%");
-  
+
   // I2C Device Detection
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(10, 210);
   tft.print("I2C0 Devices:");
+  tft.setCursor(10, 260);
+  tft.print("I2C1 Devices:");
   
-  // Scan I2C0
+  // Scan both I2C buses
   bool foundDevice = false;
+  bool foundDevice1 = false;
   int yPos = 230;
   delay(10);  // Small delay before I2C scan
   
+  // Scan I2C0
   for (byte address = 1; address < 127; address++) {
     Wire.beginTransmission(address);
     byte error = Wire.endTransmission();
     
     if (error == 0) {
-      if (!foundDevice) {
-        foundDevice = true;
-      }
+      if (!foundDevice) foundDevice = true;
       tft.setTextColor(TFT_GREEN);
       tft.setCursor(20, yPos);
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
       yPos += 20;
-      
-      if (yPos > 300) break; // Prevent overflow
+      if (yPos > 300) break;
     }
   }
   
+  // Scan I2C1
+  yPos = 280;
+  for (byte address = 1; address < 127; address++) {
+    Wire1.beginTransmission(address);
+    byte error = Wire1.endTransmission();
+    
+    if (error == 0) {
+      if (!foundDevice1) foundDevice1 = true;
+      tft.setTextColor(TFT_GREEN);
+      tft.setCursor(130, yPos);
+      tft.print("0x");
+      if (address < 16) tft.print("0");
+      tft.print(address, HEX);
+      yPos += 20;
+      if (yPos > 300) break;
+    }
+  }
+
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
     tft.setCursor(20, 230);
     tft.print("No devices found");
   }
   
-  // Draw back button
-  screenButton.drawButton();
+  if (!foundDevice1) {
+    tft.setTextColor(TFT_RED);
+    tft.setCursor(130, 280);
+    tft.print("No devices found");
+  }
 }
