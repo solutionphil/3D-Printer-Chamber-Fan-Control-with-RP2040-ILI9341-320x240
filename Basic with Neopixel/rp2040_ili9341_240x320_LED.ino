@@ -38,7 +38,7 @@ const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
 const int totalScreens = 7;  // Increase total screens for info screen
-char settingsLabels[4][20] = {"Light", "Files", "LED Control", "System Info"};  // Add LED control option and system info
+char settingsLabels[4][20] = {"Light", "Files", "LED", "System"};  // Add LED control option and system info
 
 // LED control button labels
 char ledOnLabel[] = "Turn ON";
@@ -711,7 +711,7 @@ void displayInfoScreen() {
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(1);
   tft.setCursor(10, 30);
-  tft.print("System Information");
+  tft.print("System");
   tft.setFreeFont(LABEL2_FONT);
   
   // Display CPU frequency
@@ -793,7 +793,7 @@ void displayInfoScreen() {
 
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 210);
+    tft.setCursor(20, 230);
     tft.print("No devices found");
   }
   
