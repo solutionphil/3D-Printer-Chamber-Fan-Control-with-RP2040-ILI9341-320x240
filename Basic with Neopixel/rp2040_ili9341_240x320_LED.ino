@@ -19,6 +19,7 @@
  * - TFT_eSPI: For TFT display control
  * - RP2040_PWM: For PWM-based brightness control
  * - Adafruit_NeoPixel: For NeoPixel control
+ * - Wire: For I2C communication
  */
 
 #include <LittleFS.h>
@@ -27,6 +28,7 @@
 #include <TFT_eWidget.h>  // Widget library for sliders
 #include "RP2040_PWM.h"   // PWM library
 #include <Adafruit_NeoPixel.h>
+#include <Wire.h>
 
 // Debounce control
 unsigned long lastButtonPress = 0;
@@ -35,8 +37,8 @@ const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 #define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
-const int totalScreens = 6;  // Increase total screens
-char settingsLabels[3][20] = {"Light", "Files", "LED Control"};  // Add LED control option
+const int totalScreens = 7;  // Increase total screens for info screen
+char settingsLabels[4][20] = {"Light", "Files", "LED Control", "System Info"};  // Add LED control option and system info
 
 // LED control button labels
 char ledOnLabel[] = "Turn ON";
@@ -69,6 +71,10 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 // Initialize NeoPixel
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 uint32_t currentColor = 0;
+
+// I2C pins
+#define I2C0_SDA 8
+#define I2C0_SCL 9
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -168,6 +174,9 @@ void setNeoPixelColor(int screenNumber) {
     case 6: // LED Control
       pixels.setPixelColor(0, pixels.Color(255, 255, 255)); // White
       break;
+    case 7: // System Info
+      pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
+      break;
   }
   pixels.show();
 }
@@ -175,6 +184,9 @@ void setNeoPixelColor(int screenNumber) {
 void setup() {
   // Initialize serial communication for debugging
   Serial.begin(9600);  
+  Wire.setSDA(I2C0_SDA);
+  Wire.setSCL(I2C0_SCL);
+  Wire.begin();
 
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
@@ -230,11 +242,11 @@ void loop(void) {
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
   if (currentScreen == 0) {  // Main menu screen
-    for (uint8_t b = 0; b < 5; b++) {
+    for (uint8_t b = 0; b < 3; b++) {
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
     }
 
-    for (uint8_t b = 0; b < 5; b++) {
+    for (uint8_t b = 0; b < 3; b++) {
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
@@ -251,7 +263,7 @@ void loop(void) {
       }
     }
   } else if (currentScreen == 5) {
-    for (uint8_t b = 0; b < 3; b++) {
+    for (uint8_t b = 0; b < 4; b++) {
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
@@ -263,6 +275,7 @@ void loop(void) {
             currentScreen = 4;
           }
           else if (b == 2) currentScreen = 6;  // LED Control
+          else if (b == 3) currentScreen = 7;  // System Info
           displayScreen(currentScreen);
         }
       }
@@ -384,6 +397,9 @@ void displayScreen(int screen) {  // Update screen display logic
     case 6:
       displayLEDControl();  // Display LED Control screen
       break;
+    case 7:
+      displayInfoScreen();  // Display system information screen
+      break;
   }
 
   // Draw the screen switch button
@@ -496,17 +512,15 @@ void displayScreen4() {
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
-  // List files in LittleFS
+  // Count files in LittleFS
   File root = LittleFS.open("/", "r");
-  File file = root.openNextFile();
   uint8_t i = 0;
-  while (file && i < 10) {
+  while (File file = root.openNextFile()) {
     String fileName = file.name();
     fileNames[i] = fileName; // Store file name in array
     buttonLabels[i] = fileName; // Store label in array
     fileButtons[i].initButton(&tft, 120, 80 + i * 40, 200, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)fileName.c_str(), 1);
     fileButtons[i].drawButton();
-    file = root.openNextFile();
     i++;
   }
 }
@@ -520,7 +534,7 @@ void displayScreen5() {
   menuSprite.print("Settings");
 
   // Initialize settings menu buttons
-  for (int i = 0; i < 3; i++) {  // Changed from 2 to 3 for new LED control button
+  for (int i = 0; i < 4; i++) {  // Changed to 4 for new info button
     mainMenuButtons[i].initButton(&menuSprite, 120, 100 + (i * 60), 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, settingsLabels[i], 1);
     mainMenuButtons[i].drawButton();
   }
@@ -682,4 +696,114 @@ void touch_calibrate() {
       f.close();
     }
   }
+}
+
+void displayInfoScreen() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(10, 30);
+  tft.print("System Information");
+  tft.setFreeFont(LABEL2_FONT);
+  
+  // Display CPU frequency
+  tft.setCursor(10, 50);
+  tft.print("CPU: ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(F_CPU / 1000000);
+  tft.print(" MHz");
+  
+  // Display free heap memory
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 90);
+  tft.print("Free RAM: ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(rp2040.getFreeHeap() / 1024);
+  tft.print(" KB");
+  
+  // Display LittleFS information
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 130);
+  tft.print("Files: ");
+  
+  // Count files in root directory
+  File root = LittleFS.open("/", "r");
+  int fileCount = 0;
+  while (File file = root.openNextFile()) {
+    fileCount++;
+    file.close();
+  }
+  tft.print(fileCount);
+  
+  // Display storage information
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 170);
+  tft.print("Storage Used: ");
+  
+  // Calculate total used bytes by iterating through files
+  root.close();  // Close the previous root handle
+  root = LittleFS.open("/", "r");  // Reopen root for second iteration
+  size_t usedBytes = 0;
+  while (File file = root.openNextFile()) {
+    if (file) {  // Add null check
+      usedBytes += file.size();
+      file.close();
+    }
+  }
+  root.close();
+  
+  // RP2040 flash size is typically 2MB, with some reserved for program
+  // Assuming 1MB available for LittleFS
+  const size_t totalBytes = 1024 * 1024; 
+  
+  tft.setTextColor(TFT_GREEN);
+  tft.print(usedBytes / 1024);
+  tft.print("/");
+  tft.print(totalBytes / 1024);
+  tft.print(" KB");
+  
+  // Display usage percentage
+  int usagePercent = (usedBytes * 100) / totalBytes;
+  tft.setCursor(10, 190);
+  tft.print("Usage: ");
+  tft.print(usagePercent);
+  tft.print("%");
+  
+  // I2C Device Detection
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 210);
+  tft.print("I2C0 Devices:");
+  
+  // Scan I2C0
+  bool foundDevice = false;
+  int yPos = 230;
+  delay(10);  // Small delay before I2C scan
+  
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    
+    if (error == 0) {
+      if (!foundDevice) {
+        foundDevice = true;
+      }
+      tft.setTextColor(TFT_GREEN);
+      tft.setCursor(20, yPos);
+      tft.print("0x");
+      if (address < 16) tft.print("0");
+      tft.print(address, HEX);
+      yPos += 20;
+      
+      if (yPos > 300) break; // Prevent overflow
+    }
+  }
+  
+  if (!foundDevice) {
+    tft.setTextColor(TFT_RED);
+    tft.setCursor(20, 230);
+    tft.print("No devices found");
+  }
+  
+  // Draw back button
+  screenButton.drawButton();
 }
