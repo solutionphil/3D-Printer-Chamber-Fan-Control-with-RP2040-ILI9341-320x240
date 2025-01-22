@@ -75,6 +75,9 @@ uint32_t currentColor = 0;
 // I2C pins
 #define I2C0_SDA 8
 #define I2C0_SCL 9
+// I2C pins
+#define I2C1_SDA 10
+#define I2C1_SCL 11
 
 // Define constants for screen dimensions and colors
 #define DISP_X 1
@@ -187,6 +190,7 @@ void setup() {
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
   Wire.begin();
+  
 
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
