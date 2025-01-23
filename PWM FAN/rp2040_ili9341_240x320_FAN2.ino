@@ -173,32 +173,40 @@ bool loadLEDState() {
 void saveFanSpeeds(float speeds[3]) {
   File f = LittleFS.open(FAN_SETTINGS_FILE, "w");
   if (f) {
-    Serial.println("Saving fan speeds");
+    Serial.println("Saving fan speeds to file");
     // Write each speed on a new line
     for (int i = 0; i < 3; i++) {
+      Serial.printf("Saving Fan %d: %.1f%%\n", i+1, speeds[i]);
       f.println(speeds[i]);
     }
     f.close();
+    Serial.println("Fan speeds saved successfully");
+  } else {
+    Serial.println("Failed to open fan settings file for writing");
   }
 }
 
 void loadFanSpeeds(float speeds[3]) {
   // Initialize with default values
   for (int i = 0; i < 3; i++) {
-    Serial.println("Loading fan speeds");
     speeds[i] = 0.0;
   }
   
   if (LittleFS.exists(FAN_SETTINGS_FILE)) {
+    Serial.println("Loading fan speeds from file");
     File f = LittleFS.open(FAN_SETTINGS_FILE, "r");
     if (f) {
       for (int i = 0; i < 3; i++) {
         String val = f.readStringUntil('\n');
+        Serial.printf("Read value for Fan %d: %s\n", i+1, val.c_str());
         if (val.length() > 0) {
           speeds[i] = constrain(val.toFloat(), 0, 100);
         }
       }
       f.close();
+      Serial.println("Fan speeds loaded successfully");
+    } else {
+      Serial.println("Failed to open fan settings file for reading");
     }
   }
 }
@@ -634,6 +642,9 @@ void displayScreen5() {
 void displayLEDControl() {
   bool currentState = neopixelState; // Store current state to detect changes
   tft.fillScreen(TFT_BLACK);
+
+
+
   tft.setTextColor(TFT_WHITE);
   
   // Draw LED status
@@ -658,7 +669,8 @@ void displayFanControl(uint8_t fanIndex) {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
-  
+      // Ensure knob sprite is ready
+  if (!knob.created()) knob.createSprite(30, 40);
   // Create slider parameters
   slider_t param;
   param.slotWidth = 10;
@@ -681,12 +693,11 @@ void displayFanControl(uint8_t fanIndex) {
     int yOffset = i * 90;  // Space between fan controls
     
     // Draw fan labels
-    tft.drawString("Fan " + String(i + 1), 30, 40 + yOffset);
-    tft.drawString("Speed", 30, 60 + yOffset);
+    tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
     
     // Draw current speed percentage
     tft.setTextColor(TFT_GREEN);
-    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 40 + yOffset);
+    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 80 + yOffset);
     tft.setTextColor(TFT_WHITE);
     
     param.startPosition = int16_t(currentFanSpeeds[i]);
@@ -701,7 +712,7 @@ void displayFanControl(uint8_t fanIndex) {
 
   // Add sync checkbox
   tft.fillRect(20, 20, 15, 15, TFT_WHITE);
-  tft.drawString("Sync All Fans", 45, 20);
+  tft.drawString("Sync All", 45, 20);
   if (fanSyncEnabled) {
     tft.drawLine(20, 20, 35, 35, TFT_BLACK);
     tft.drawLine(35, 20, 20, 35, TFT_BLACK);
@@ -734,6 +745,7 @@ void displayFanControl(uint8_t fanIndex) {
           float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
           currentFanSpeeds[i] = fanSpeed;
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
+          Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
           saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
           
           // If sync is enabled, update all fans
