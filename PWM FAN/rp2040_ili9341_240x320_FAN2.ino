@@ -97,6 +97,9 @@ uint32_t currentColor = 0;
 // Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
 #define LABEL2_FONT &FreeSansBold9pt7b    // Key label font 2
+#define LABEL3_FONT &TomThumb  //
+#define LABEL4_FONT &FreeSerifBold9pt7b    
+#define LABEL5_FONT &FreeMonoBold9pt7b
 
 RP2040_PWM* PWM_Instance;
 
@@ -951,38 +954,62 @@ void displayInfoScreen() {
   screenButton.drawButton();
 
   // Rest of header
+    tft.setFreeFont(LABEL2_FONT);
   tft.setCursor(10, 20);
   tft.print("System Info");
   tft.setFreeFont(LABEL2_FONT);
-  
-  // Display RP2040 temperature
-  tft.setCursor(10, 70);
-  tft.print("Temp: ");
-  tft.setTextColor(TFT_GREEN);
-  tft.print(analogReadTemp());
-  tft.print(" C");
-  
-  // Display CPU frequency
+
+   // Display CPU frequency
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(10, 50);
   tft.print("CPU: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(F_CPU / 1000000);
-  tft.print(" MHz");
-  
+  tft.print(" MHz"); 
+
+  // Display RP2040 temperature
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 70);
+  tft.print("Temp: ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(analogReadTemp());
+  tft.print(" C");
+
   // Display free heap memory
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 110);
+  tft.setCursor(10, 90);
   tft.print("Free RAM: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(rp2040.getFreeHeap()/1024);
-  tft.print(" Kbytes");
+  tft.print(" KB/ 260KB");
   
+    // Display LittleFS information
+  tft.setTextColor(TFT_YELLOW);
+  tft.setCursor(10, 120);
+  tft.print("LittleFS: ");
+    tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 140);
+  tft.print("Storage: ");
+
+    if(!LittleFS.begin()) {
+      tft.println("LittleFS Mount failed!");
+      while (1);
+    }
+    fs::FSInfo fs_info;
+    LittleFS.info(fs_info);
+    uint32_t totalBytes= fs_info.totalBytes;
+    uint32_t usedBytes= (totalBytes - fs_info.usedBytes);
+  tft.setTextColor(TFT_GREEN);
+    tft.print(usedBytes/1024);
+      tft.print("KB / ");
+    tft.print(totalBytes/1024);
+          tft.print("KB");
   // Display LittleFS information
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 150);
-  tft.print("Files: ");
-  
+  tft.setCursor(10, 160);
+  tft.print("Number of Files: ");
+    tft.setTextColor(TFT_GREEN);
+    
   // Count files in root directory
   File root = LittleFS.open("/", "r");
   int fileCount = 0;
