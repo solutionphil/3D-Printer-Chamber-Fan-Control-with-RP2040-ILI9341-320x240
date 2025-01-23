@@ -30,6 +30,10 @@
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h>
 
+// PWM frequencies
+float frequency = 1831;      // For brightness control
+float fanFrequency = 20000;  // Separate frequency for fans
+
 // Debounce control
 unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
@@ -53,7 +57,9 @@ char backLabel[] = "Back";
 // Initialize TFT and slider objects (updated for Fans in Main Menu)
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
-SliderWidget slider = SliderWidget(&tft, &knob);
+SliderWidget slider1 = SliderWidget(&tft, &knob);
+SliderWidget slider2 = SliderWidget(&tft, &knob);
+SliderWidget slider3 = SliderWidget(&tft, &knob);
 
 // Create sprite for main menu
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
@@ -95,17 +101,17 @@ uint32_t currentColor = 0;
 RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
-float frequency = 1831;
 float dutyCycle; //= 90;  // Default brightness value
 
 // PWM Fan Control
 #define FAN1_PIN 27
 #define FAN2_PIN 28
 #define FAN3_PIN 29
-#define FAN1_FILE "/fan1.txt"
-#define FAN2_FILE "/fan2.txt"
-#define FAN3_FILE "/fan3.txt"
+#define FAN_SETTINGS_FILE "/fan_settings.json"
 RP2040_PWM* Fan_PWM[3];
+
+// Global array to store current fan speeds
+float currentFanSpeeds[3] = {0.0, 0.0, 0.0};
 
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button fileButtons[10]; // Buttons for file explorer
@@ -161,24 +167,39 @@ bool loadLEDState() {
   return false; // Default LED state to OFF if file doesn't exist
 }
 
-void saveFanSpeed(float value, const char* file) {
-  File f = LittleFS.open(file, "w");
+void saveFanSpeeds(float speeds[3]) {
+  File f = LittleFS.open(FAN_SETTINGS_FILE, "w");
   if (f) {
-    f.println(value);
+    // Write JSON format: {"fan1":speed1,"fan2":speed2,"fan3":speed3}
+    f.print("{\"fan1\":");
+    f.print(speeds[0]);
+    f.print(",\"fan2\":");
+    f.print(speeds[1]);
+    f.print(",\"fan3\":");
+    f.print(speeds[2]);
+    f.println("}");
     f.close();
   }
 }
 
-float loadFanSpeed(const char* file) {
-  if (LittleFS.exists(file)) {
-    File f = LittleFS.open(file, "r");
-    if (f) {
-      String val = f.readStringUntil('\n');
-      f.close();
-      return val.toFloat();
+void loadFanSpeeds(float speeds[3]) {
+  if (LittleFS.exists(FAN_SETTINGS_FILE)) {
+    File f = LittleFS.open(FAN_SETTINGS_FILE, "r");
+    if (!f) return;
+    String json = f.readString();
+    f.close();
+    
+    // Simple JSON parsing
+    int pos1 = json.indexOf("\"fan1\":") + 7;
+    int pos2 = json.indexOf("\"fan2\":") + 7;
+    int pos3 = json.indexOf("\"fan3\":") + 7;
+    
+    if (pos1 > 6 && pos2 > 6 && pos3 > 6) {
+      speeds[0] = json.substring(pos1, json.indexOf(",", pos1)).toFloat();
+      speeds[1] = json.substring(pos2, json.indexOf(",", pos2)).toFloat();
+      speeds[2] = json.substring(pos3, json.indexOf("}", pos3)).toFloat();
     }
   }
-  return 0.0; // Default fan speed if file doesn't exist
 }
 
 void setNeoPixelColor(int screenNumber) {
@@ -269,13 +290,16 @@ void setup() {
 
   // Initialize PWM for fans
   for (int i = 0; i < 3; i++) {
-    Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, frequency, 0);
+    Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, fanFrequency, 0);
   }
 
   // Load saved fan speeds
-  float fanSpeeds[3] = {loadFanSpeed(FAN1_FILE), loadFanSpeed(FAN2_FILE), loadFanSpeed(FAN3_FILE)};
+  float fanSpeeds[3] = {0, 0, 0};
+  loadFanSpeeds(fanSpeeds);
   for (int i = 0; i < 3; i++) {
-    Fan_PWM[i]->setPWM(FAN1_PIN + i, frequency, fanSpeeds[i]);
+    currentFanSpeeds[i] = fanSpeeds[i];
+    float dutyCycle = min(1.0, max(0.0, fanSpeeds[i] / 100.0));
+    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, dutyCycle);
   }
 
   // Initialize the TFT display and set its rotation (Main Menu updated)
@@ -358,10 +382,10 @@ void loop(void) {
     }
   } else if (currentScreen == 2) {
     if (pressed) {
-      if (slider.checkTouch(t_x, t_y)) {
+      if (slider1.checkTouch(t_x, t_y)) {
         // Handle slider touch logic
-        dutyCycle = round(slider.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
-        slider.setSliderPosition(dutyCycle); // Update slider position to snapped value
+        dutyCycle = round(slider1.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
+        slider1.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
         saveBrightness(dutyCycle);  // Save the new brightness value
         // Update percentage display
@@ -544,13 +568,13 @@ void displayScreen2() {
   param.startPosition = int16_t(50);
   param.sliderDelay = 0;
   // Draw the slider
-  slider.drawSlider(20, 160, param);
+  slider1.drawSlider(20, 160, param);
 
   int16_t x, y;    // x and y can be negative
   uint16_t w, h;   // Width and height
-  slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
-  slider.setSliderPosition(dutyCycle);
+  slider1.setSliderPosition(dutyCycle);
 }
 
 void displayScreen3() {
@@ -634,42 +658,45 @@ void displayFanControl(uint8_t fanIndex) {
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   
-  // Draw fan speed slider
-  tft.drawString("Fan ", 30, 50);
-  tft.drawString(String(fanIndex + 1), 70, 50);
-  tft.drawString("Speed", 30, 80);
-
   // Create slider parameters
   slider_t param;
-  
-  // Slider slot parameters
   param.slotWidth = 10;
   param.slotLength = 200;
   param.slotColor = TFT_BLUE;
   param.slotBgColor = TFT_YELLOW;
   param.orientation = H_SLIDER;
-  
-  // Slider knob parameters
   param.knobWidth = 20;
   param.knobHeight = 30;
   param.knobRadius = 5;
   param.knobColor = TFT_WHITE;
   param.knobLineColor = TFT_RED;
-   
-  // Slider range and movement
   param.sliderLT = 0;
   param.sliderRB = 100;
-  param.startPosition = int16_t(Fan_PWM[fanIndex]->getActualDutyCycle() * 100);
   param.sliderDelay = 0;
-  
-  // Draw the slider
-  slider.drawSlider(20, 120, param);
 
-  int16_t x, y;    // x and y can be negative
-  uint16_t w, h;   // Width and height
-  slider.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
-  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
-  slider.setSliderPosition(Fan_PWM[fanIndex]->getActualDutyCycle() * 100);
+  SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
+  
+  for (int i = 0; i < 3; i++) {
+    int yOffset = i * 90;  // Space between fan controls
+    
+    // Draw fan labels
+    tft.drawString("Fan " + String(i + 1), 30, 40 + yOffset);
+    tft.drawString("Speed", 30, 60 + yOffset);
+    
+    // Draw current speed percentage
+    tft.setTextColor(TFT_GREEN);
+    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 40 + yOffset);
+    tft.setTextColor(TFT_WHITE);
+    
+    param.startPosition = int16_t(currentFanSpeeds[i]);
+    sliders[i]->drawSlider(20, 80 + yOffset, param);
+    
+    int16_t x, y;
+    uint16_t w, h;
+    sliders[i]->getBoundingRect(&x, &y, &w, &h);
+    tft.drawRect(x, y, w, h, TFT_DARKGREY);
+    sliders[i]->setSliderPosition(currentFanSpeeds[i]);
+  }
 
   // Redraw the back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
@@ -678,18 +705,32 @@ void displayFanControl(uint8_t fanIndex) {
   while (true) {
     uint16_t t_x = 0, t_y = 0;
     bool pressed = tft.getTouch(&t_x, &t_y);
-
+    
     if (pressed) {
-      if (slider.checkTouch(t_x, t_y)) {
-        // Handle slider touch logic
-        float fanSpeed = round(slider.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
-        slider.setSliderPosition(fanSpeed); // Update slider position to snapped value
-        Fan_PWM[fanIndex]->setPWM(FAN1_PIN + fanIndex, frequency, fanSpeed / 100.0);
-        saveFanSpeed(fanSpeed, String(FAN1_FILE + fanIndex).c_str());  // Save the new fan speed
-        // Update percentage display
-        tft.fillRect(90, 160, 80, 30, TFT_BLACK);
-        tft.setTextColor(TFT_GREEN);
-        tft.drawString(String(int(fanSpeed)) + "%", 100, 170);
+      for (int i = 0; i < 3; i++) {
+        if (sliders[i]->checkTouch(t_x, t_y)) {
+          float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
+          currentFanSpeeds[i] = fanSpeed;
+          sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
+          
+          // Update the selected fan's speed
+          Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, min(1.0, fanSpeed / 100.0));
+          
+          // Save all fan speeds
+          float allSpeeds[3];
+          for (int j = 0; j < 3; j++) {
+            allSpeeds[j] = currentFanSpeeds[j];
+          }
+          saveFanSpeeds(allSpeeds);
+          
+          // Update percentage display
+          int yOffset = i * 90;
+          tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+          tft.setTextColor(TFT_GREEN);
+          tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 40 + yOffset);
+          tft.setTextColor(TFT_WHITE);
+          break;
+        }
       }
     }
 
