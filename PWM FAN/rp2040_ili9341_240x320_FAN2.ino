@@ -38,7 +38,7 @@ float fanFrequency = 20000;  // Separate frequency for fans
 unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 
-#define LIGHT_FILE "/light"
+#define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
 const int totalScreens = 8;  // Increase total screens for info screen and fan control
@@ -68,7 +68,7 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 #define CALIBRATION_FILE "/TouchCalData1" // Calibration data file
 #define REPEAT_CAL false
 #define pinToUse      7
-#define FAN_SETTINGS_FILE "/fan_settings.json"
+#define BRIGHTNESS_FILE "/brightness.txt"
 
 // NeoPixel definitions
 #define NEOPIXEL_PIN 16
@@ -107,6 +107,7 @@ float dutyCycle; //= 90;  // Default brightness value
 #define FAN1_PIN 27
 #define FAN2_PIN 28
 #define FAN3_PIN 29
+#define FAN_SETTINGS_FILE "/fan_settings.json"
 RP2040_PWM* Fan_PWM[3];
 
 // Global array to store current fan speeds
@@ -126,34 +127,64 @@ TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
 
-void saveLightSettings(float brightness, bool ledState) {
-  File f = LittleFS.open(LIGHT_FILE, "w");
+void saveBrightness(float value) {
+  File f = LittleFS.open(BRIGHTNESS_FILE, "w");
   if (f) {
-    f.print("{\"brightness\":");
-    f.print(brightness);
-    f.print(",\"led_state\":");
-    f.print(ledState ? "1" : "0");
+    f.println(value);
+    f.close();
+  }
+}
+
+float loadBrightness() {
+  if (LittleFS.exists(BRIGHTNESS_FILE)) {
+    File f = LittleFS.open(BRIGHTNESS_FILE, "r");
+    if (f) {
+      String val = f.readStringUntil('\n');
+      f.close();
+      return val.toFloat();
+    }
+  }
+  return 90.0; // Default brightness if file doesn't exist
+}
+
+void saveLEDState(bool state) {
+  File f = LittleFS.open(LED_STATE_FILE, "w");
+  if (f) {
+    f.println(state ? "1" : "0");
+    f.close();
+  }
+}
+
+bool loadLEDState() {
+  if (LittleFS.exists(LED_STATE_FILE)) {
+    File f = LittleFS.open(LED_STATE_FILE, "r");
+    if (!f) {
+      return false;  // Return false if file can't be opened
+    }
+    String val = f.readStringUntil('\n');
+    f.close();
+    // Trim whitespace and compare exact string
+    val.trim();
+    return (val == "1");
+  }
+  return false; // Default LED state to OFF if file doesn't exist
+}
+
+void saveFanSpeeds(float speeds[3]) {
+  File f = LittleFS.open(FAN_SETTINGS_FILE, "w");
+  if (f) {
+    // Write JSON format: {"fan1":speed1,"fan2":speed2,"fan3":speed3}
+    f.print("{\"fan1\":");
+    f.print(speeds[0]);
+    f.print(",\"fan2\":");
+    f.print(speeds[1]);
+    f.print(",\"fan3\":");
+    f.print(speeds[2]);
     f.println("}");
     f.close();
   }
 }
 
-void loadLightSettings(float* brightness, bool* ledState) {
-  if (LittleFS.exists(LIGHT_FILE)) {
-    File f = LittleFS.open(LIGHT_FILE, "r");
-    if (!f) return;
-    String json = f.readString();
-    f.close();
-    
-    int brightnessPos = json.indexOf("\"brightness\":") + 12;
-    int ledStatePos = json.indexOf("\"led_state\":") + 11;
-    
-    if (brightnessPos > 11 && ledStatePos > 10) {
-      *brightness = json.substring(brightnessPos, json.indexOf(",", brightnessPos)).toFloat();
-      *ledState = (json.substring(ledStatePos, json.indexOf("}", ledStatePos)) == "1");
-    }
-  }
-}
 void loadFanSpeeds(float speeds[3]) {
   if (LittleFS.exists(FAN_SETTINGS_FILE)) {
     File f = LittleFS.open(FAN_SETTINGS_FILE, "r");
@@ -199,7 +230,10 @@ void setNeoPixelColor(int screenNumber) {
     case 6: // LED Control
       pixels.setPixelColor(0, pixels.Color(255, 255, 255)); // White
       break;
-    case 7: // System Info
+    case 7: // Fan Control
+      pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
+      break;
+    case 8: // System Info
       pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
       break;
   }
@@ -231,10 +265,12 @@ void setup() {
   pixels.begin();
   pixels.setBrightness(50);
   delay(100); // Small delay for stable initialization
+
+  // Load saved brightness
+  dutyCycle = loadBrightness();
   
-  // Load saved brightness and LED state
-  loadLightSettings(&dutyCycle, &neopixelState);
-  if (dutyCycle == 0) dutyCycle = 90.0; // Default brightness if not set
+  // Load saved LED state
+  neopixelState = loadLEDState();
   
   // Apply LED state and show immediately
   if (neopixelState) {
@@ -314,7 +350,6 @@ void loop(void) {
           else if (b == 1) {  // File Explorer
             displayLoadingScreen();
             currentScreen = 4;
-            displayFileExplorer();
           }
           else if (b == 2) currentScreen = 6;  // LED Control
           else if (b == 3) currentScreen = 8;  // System Info
@@ -333,7 +368,7 @@ void loop(void) {
         setNeoPixelColor(currentScreen);
       }
       pixels.show();
-      saveLightSettings(dutyCycle, neopixelState);  // Save both settings
+      saveLEDState(neopixelState);
       displayLEDControl();
       delay(500);
     }
@@ -355,7 +390,7 @@ void loop(void) {
         dutyCycle = round(slider1.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
         slider1.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        saveLightSettings(dutyCycle, neopixelState);  // Save both settings
+        saveBrightness(dutyCycle);  // Save the new brightness value
         // Update percentage display
         tft.fillRect(90, 110, 80, 30, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
@@ -442,10 +477,10 @@ void displayScreen(int screen) {  // Update screen display logic
       displayScreen3();
       break;
     case 4:
-      displayFileExplorer();  // Display file explorer
+      displayScreen4();  // Display file explorer
       break;
     case 5:
-      displaySettings();  // Display Settings
+      displayScreen5();  // Display Settings
       break;
     case 6:
       displayLEDControl();  // Display LED Control screen
@@ -553,7 +588,7 @@ void displayScreen3() {
   tft.print("Screen 3");
 }
 
-void displayFileExplorer() {
+void displayScreen4() {
   tft.fillScreen(TFT_BLACK);
 
   // Additional delay specifically for file explorer to prevent immediate touch processing
@@ -581,7 +616,7 @@ void displayFileExplorer() {
   }
 }
 
-void displaySettings() {
+void displayScreen5() {
   menuSprite.fillSprite(TFT_BLACK);
   menuSprite.setTextColor(TFT_WHITE);
   menuSprite.setFreeFont(LABEL2_FONT);
@@ -784,7 +819,7 @@ void handleFileButtonPress(uint8_t index) {
   if (displayDeletionPrompt(fileName)) {
     if (LittleFS.exists(fileName)) {
       LittleFS.remove(fileName);
-      displayFileExplorer();  // Immediately refresh screen after deletion
+      displayScreen4();  // Immediately refresh screen after deletion
       return;
     }
   } else {
@@ -825,7 +860,7 @@ void displayFileContents(String fileName) {
     backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
-      displayFileExplorer();
+      displayScreen4();
       return;
     }
   }
