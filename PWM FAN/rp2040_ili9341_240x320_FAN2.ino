@@ -314,6 +314,7 @@ void loop(void) {
           else if (b == 1) {  // File Explorer
             displayLoadingScreen();
             currentScreen = 4;
+            displayFileExplorer();
           }
           else if (b == 2) currentScreen = 6;  // LED Control
           else if (b == 3) currentScreen = 8;  // System Info
@@ -441,10 +442,10 @@ void displayScreen(int screen) {  // Update screen display logic
       displayScreen3();
       break;
     case 4:
-      displayScreen4();  // Display file explorer
+      displayFileExplorer();  // Display file explorer
       break;
     case 5:
-      displayScreen5();  // Display Settings
+      displaySettings();  // Display Settings
       break;
     case 6:
       displayLEDControl();  // Display LED Control screen
@@ -552,7 +553,7 @@ void displayScreen3() {
   tft.print("Screen 3");
 }
 
-void displayScreen4() {
+void displayFileExplorer() {
   tft.fillScreen(TFT_BLACK);
 
   // Additional delay specifically for file explorer to prevent immediate touch processing
@@ -580,7 +581,7 @@ void displayScreen4() {
   }
 }
 
-void displayScreen5() {
+void displaySettings() {
   menuSprite.fillSprite(TFT_BLACK);
   menuSprite.setTextColor(TFT_WHITE);
   menuSprite.setFreeFont(LABEL2_FONT);
@@ -783,7 +784,7 @@ void handleFileButtonPress(uint8_t index) {
   if (displayDeletionPrompt(fileName)) {
     if (LittleFS.exists(fileName)) {
       LittleFS.remove(fileName);
-      displayScreen4();  // Immediately refresh screen after deletion
+      displayFileExplorer();  // Immediately refresh screen after deletion
       return;
     }
   } else {
@@ -824,7 +825,7 @@ void displayFileContents(String fileName) {
     backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
-      displayScreen4();
+      displayFileExplorer();
       return;
     }
   }
