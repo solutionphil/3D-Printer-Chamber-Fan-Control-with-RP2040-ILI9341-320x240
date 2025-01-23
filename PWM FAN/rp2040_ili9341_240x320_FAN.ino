@@ -65,6 +65,8 @@ RP2040_PWM* Fan1_PWM, *Fan2_PWM, *Fan3_PWM;
 // Initialize TFT and slider objects
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
+TFT_eSprite sliderSprite = TFT_eSprite(&tft); // Create sprite for slider background
+
 // Fan control sprites
 TFT_eSprite fanKnob1 = TFT_eSprite(&tft);
 TFT_eSprite fanKnob2 = TFT_eSprite(&tft);
@@ -252,6 +254,8 @@ void setup() {
   // Initialize the knob sprite early
   knob.setColorDepth(8);
   knob.createSprite(30, 40);  // Size for the slider knob
+  sliderSprite.setColorDepth(8);
+  sliderSprite.createSprite(240, 320);  // Full screen sprite
   
   // Initialize fan control knob sprites
   fanKnob1.createSprite(20, 20);
@@ -584,46 +588,46 @@ void drawFanKnob(TFT_eSprite* knob, float duty, int x) {
 }
 
 void displayScreen2() {
-  static float lastDutyCycle = -1;  // Track last duty cycle
-  static int16_t lastSliderPos = -1;  // Track last slider position
-   
-  // Ensure knob sprite is ready
-  if (!knob.created()) knob.createSprite(30, 40);
-  
-  // Only redraw static elements if duty cycle was reset
-  if (lastDutyCycle == -1) {
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_CYAN);
-    tft.setFreeFont(LABEL2_FONT);
-    tft.setTextSize(0);
-    tft.drawString("Brightness", 30, 50);
-    
-    // Draw static slider parts
+  static float lastDutyCycle = -1;
+  static bool sliderInitialized = false;
+
+  sliderSprite.fillSprite(TFT_BLACK);
+  sliderSprite.setTextColor(TFT_CYAN);
+  sliderSprite.setFreeFont(LABEL2_FONT);
+  sliderSprite.setTextSize(0);
+  sliderSprite.drawString("Brightness", 30, 50);
+
+  // Initialize slider only once
+  if (!sliderInitialized) {
     slider_t param;
-    param.slotWidth = 10;
-    param.slotLength = 200;
-    param.slotColor = TFT_BLUE;
-    param.slotBgColor = TFT_YELLOW;
-    param.orientation = H_SLIDER;
-    param.knobWidth = 20;
+    param.width = 30;  // Increased width for better visibility
+    param.length = 200;
+    param.orientation = SLIDER_VERTICAL;  // Changed to vertical
+    param.knobWidth = 40;
     param.knobHeight = 30;
     param.knobRadius = 5;
-    param.knobColor = TFT_WHITE;
-    param.knobLineColor = TFT_RED;
-    param.sliderLT = 10;
-    param.sliderRB = 100;
-    param.startPosition = int16_t(dutyCycle);
-    param.sliderDelay = 0;
-    slider.drawSlider(20, 160, param);
+    slider.setSliderParams(&param);
+    sliderInitialized = true;
   }
-   
-  // Only update percentage display if value changed
+
+  // Draw slider background to sprite
+  sliderSprite.fillRect(105, 80, 30, 200, TFT_DARKGREY);  // Vertical background
+  
+  // Draw slider itself
+  slider.drawSlider(100, 80);
+  
+  // Update slider position if changed
   if (lastDutyCycle != dutyCycle) {
-    tft.fillRect(90, 110, 80, 30, TFT_BLACK);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+    // Clear previous percentage
+    sliderSprite.fillRect(90, 290, 80, 30, TFT_BLACK);
+    // Draw new percentage
+    sliderSprite.setTextColor(TFT_GREEN);
+    sliderSprite.drawString(String(int(dutyCycle)) + "%", 95, 290);
     lastDutyCycle = dutyCycle;
   }
+
+  // Push sprite to display
+  sliderSprite.pushSprite(0, 0);
 }
 
 void displayScreen3() {
