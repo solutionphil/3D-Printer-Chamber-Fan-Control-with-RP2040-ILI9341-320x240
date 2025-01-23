@@ -307,8 +307,7 @@ void setup() {
   loadFanSpeeds(fanSpeeds);
   for (int i = 0; i < 3; i++) {
     currentFanSpeeds[i] = fanSpeeds[i];
-    float dutyCycle = min(1.0, max(0.0, fanSpeeds[i] / 100.0));
-    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, dutyCycle);
+    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
   }
 
   // Initialize the TFT display and set its rotation (Main Menu updated)
@@ -688,7 +687,6 @@ void displayFanControl(uint8_t fanIndex) {
   param.sliderDelay = 0;
   
 
-
   SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
   
   for (int i = 0; i < 3; i++) {
@@ -698,7 +696,6 @@ void displayFanControl(uint8_t fanIndex) {
     uint16_t w, h;
     sliders[i]->getBoundingRect(&x, &y, &w, &h);
     tft.drawRect(x, y, w, h, TFT_DARKGREY);
-
 
   
         // Initialize slider position before drawing
@@ -764,7 +761,7 @@ void displayFanControl(uint8_t fanIndex) {
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
-              Fan_PWM[j]->setPWM(FAN1_PIN + j, fanFrequency, min(1.0, fanSpeed / 100.0));
+              Fan_PWM[j]->setPWM(FAN1_PIN + j, fanFrequency, fanSpeed);
               
               // Update percentage displays for all fans
               int yOffset = j * 90;
@@ -775,7 +772,7 @@ void displayFanControl(uint8_t fanIndex) {
             }
           } else {
             // Original single fan update code
-            Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, min(1.0, fanSpeed / 100.0));
+            Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
             int yOffset = i * 90;
             tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
             tft.setTextColor(TFT_GREEN);
