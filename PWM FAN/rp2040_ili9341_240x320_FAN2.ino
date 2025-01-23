@@ -292,12 +292,12 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
-  if (currentScreen == 0) {  // Main menu screen
-    for (uint8_t b = 0; b < 4; b++) {
+  if (currentScreen == 0) {  // Main menu screen (System Info removed)
+    for (uint8_t b = 0; b < 3; b++) {  // Adjusted loop to 3 buttons
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
     }
 
-    for (uint8_t b = 0; b < 4; b++) {
+    for (uint8_t b = 0; b < 3; b++) {  // Adjusted loop to 3 buttons
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
@@ -307,15 +307,13 @@ void loop(void) {
             case 0: currentScreen = 7; break;  // Fans (moved from Settings)
             case 1: currentScreen = 3; break;  // Screen 3
             case 2: currentScreen = 5; break;  // Settings
-            case 3: currentScreen = 8; break;  // System Info
-            default: break;
           }
           displayScreen(currentScreen);  // Display the selected screen
         }
       }
     }
-  } else if (currentScreen == 5) {
-    for (uint8_t b = 0; b < 4; b++) {
+  } else if (currentScreen == 5) {  // Settings menu
+    for (uint8_t b = 0; b < 4; b++) {  // Adjusted to 4 buttons for Settings
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
@@ -489,9 +487,8 @@ void drawMainMenu() {
   mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
   mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
   mainMenuButtons[2].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
-  mainMenuButtons[3].initButton(&menuSprite, 120, 300, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"System Info", 1);
 
-  for (uint8_t i = 0; i < 4; i++) {
+  for (uint8_t i = 0; i < 3; i++) {  // Adjusted loop to 3 buttons
     mainMenuButtons[i].drawButton();
   }
   
