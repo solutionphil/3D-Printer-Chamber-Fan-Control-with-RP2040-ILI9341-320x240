@@ -591,43 +591,33 @@ void displayScreen2() {
   static float lastDutyCycle = -1;
   static bool sliderInitialized = false;
 
-  sliderSprite.fillSprite(TFT_BLACK);
-  sliderSprite.setTextColor(TFT_CYAN);
-  sliderSprite.setFreeFont(LABEL2_FONT);
-  sliderSprite.setTextSize(0);
-  sliderSprite.drawString("Brightness", 30, 50);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_CYAN);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(0);
+  tft.drawString("Brightness", 30, 50);
 
   // Initialize slider only once
   if (!sliderInitialized) {
-    slider_t param;
-    param.width = 30;  // Increased width for better visibility
-    param.length = 200;
-    param.orientation = SLIDER_VERTICAL;  // Changed to vertical
-    param.knobWidth = 40;
-    param.knobHeight = 30;
-    param.knobRadius = 5;
-    slider.setSliderParams(&param);
+    slider.setSliderScale(0, 100);  // Set scale from 0 to 100
+    slider.initSliderVertical(100, 80, 200, 30);  // x, y, length, width
+    slider.setSliderPosition(dutyCycle);
     sliderInitialized = true;
   }
 
-  // Draw slider background to sprite
-  sliderSprite.fillRect(105, 80, 30, 200, TFT_DARKGREY);  // Vertical background
+  // Draw slider background
+  tft.fillRect(100, 80, 30, 200, TFT_DARKGREY);  // Vertical background
   
   // Draw slider itself
   slider.drawSlider(100, 80);
   
   // Update slider position if changed
   if (lastDutyCycle != dutyCycle) {
-    // Clear previous percentage
-    sliderSprite.fillRect(90, 290, 80, 30, TFT_BLACK);
-    // Draw new percentage
-    sliderSprite.setTextColor(TFT_GREEN);
-    sliderSprite.drawString(String(int(dutyCycle)) + "%", 95, 290);
+    tft.fillRect(90, 290, 80, 30, TFT_BLACK);
+    tft.setTextColor(TFT_GREEN);
+    tft.drawString(String(int(dutyCycle)) + "%", 95, 290);
     lastDutyCycle = dutyCycle;
   }
-
-  // Push sprite to display
-  sliderSprite.pushSprite(0, 0);
 }
 
 void displayScreen3() {
