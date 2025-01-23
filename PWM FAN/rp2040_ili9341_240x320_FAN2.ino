@@ -107,7 +107,7 @@ float dutyCycle; //= 90;  // Default brightness value
 #define FAN1_PIN 27
 #define FAN2_PIN 28
 #define FAN3_PIN 29
-#define FAN_SETTINGS_FILE "/fan_settings.json"
+#define FAN_SETTINGS_FILE "/fan_settings.txt"
 RP2040_PWM* Fan_PWM[3];
 
 // Global array to store current fan speeds
@@ -173,34 +173,32 @@ bool loadLEDState() {
 void saveFanSpeeds(float speeds[3]) {
   File f = LittleFS.open(FAN_SETTINGS_FILE, "w");
   if (f) {
-    // Write JSON format: {"fan1":speed1,"fan2":speed2,"fan3":speed3}
-    f.print("{\"fan1\":");
-    f.print(speeds[0]);
-    f.print(",\"fan2\":");
-    f.print(speeds[1]);
-    f.print(",\"fan3\":");
-    f.print(speeds[2]);
-    f.println("}");
+    Serial.println("Saving fan speeds");
+    // Write each speed on a new line
+    for (int i = 0; i < 3; i++) {
+      f.println(speeds[i]);
+    }
     f.close();
   }
 }
 
 void loadFanSpeeds(float speeds[3]) {
+  // Initialize with default values
+  for (int i = 0; i < 3; i++) {
+    Serial.println("Loading fan speeds");
+    speeds[i] = 0.0;
+  }
+  
   if (LittleFS.exists(FAN_SETTINGS_FILE)) {
     File f = LittleFS.open(FAN_SETTINGS_FILE, "r");
-    if (!f) return;
-    String json = f.readString();
-    f.close();
-    
-    // Simple JSON parsing
-    int pos1 = json.indexOf("\"fan1\":") + 7;
-    int pos2 = json.indexOf("\"fan2\":") + 7;
-    int pos3 = json.indexOf("\"fan3\":") + 7;
-    
-    if (pos1 > 6 && pos2 > 6 && pos3 > 6) {
-      speeds[0] = json.substring(pos1, json.indexOf(",", pos1)).toFloat();
-      speeds[1] = json.substring(pos2, json.indexOf(",", pos2)).toFloat();
-      speeds[2] = json.substring(pos3, json.indexOf("}", pos3)).toFloat();
+    if (f) {
+      for (int i = 0; i < 3; i++) {
+        String val = f.readStringUntil('\n');
+        if (val.length() > 0) {
+          speeds[i] = constrain(val.toFloat(), 0, 100);
+        }
+      }
+      f.close();
     }
   }
 }
@@ -736,6 +734,7 @@ void displayFanControl(uint8_t fanIndex) {
           float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
           currentFanSpeeds[i] = fanSpeed;
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
+          saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
           
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
