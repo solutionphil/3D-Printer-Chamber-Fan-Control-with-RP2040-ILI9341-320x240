@@ -187,6 +187,7 @@ void saveFanSpeeds(float speeds[3]) {
 }
 
 void loadFanSpeeds(float speeds[3]) {
+
   // Initialize with default values
   for (int i = 0; i < 3; i++) {
     speeds[i] = 0.0;
@@ -667,6 +668,9 @@ void displayFanControl(uint8_t fanIndex) {
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   
+  // Ensure knob sprite is ready
+  if (!knob.created()) knob.createSprite(30, 40);
+
   // Create slider parameters
   slider_t param;
   param.slotWidth = 10;
@@ -682,28 +686,37 @@ void displayFanControl(uint8_t fanIndex) {
   param.sliderLT = 0;
   param.sliderRB = 100;
   param.sliderDelay = 0;
+  
+
 
   SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
   
   for (int i = 0; i < 3; i++) {
     int yOffset = i * 90;  // Space between fan controls
-    
-    // Draw fan labels
-    tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
-    
+        
+    int16_t x, y;
+    uint16_t w, h;
+    sliders[i]->getBoundingRect(&x, &y, &w, &h);
+    tft.drawRect(x, y, w, h, TFT_DARKGREY);
+
+
+  
+        // Initialize slider position before drawing
+    param.startPosition = float(currentFanSpeeds[i]*100);
+
+    sliders[i]->drawSlider(20, 80 + yOffset, param);
+    sliders[i]->setSliderPosition(currentFanSpeeds[i]);
+  
+  
+
     // Draw current speed percentage
     tft.setTextColor(TFT_GREEN);
     tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
     tft.setTextColor(TFT_WHITE);
-        int16_t x, y;
-    uint16_t w, h;
-    sliders[i]->getBoundingRect(&x, &y, &w, &h);
-    tft.drawRect(x, y, w, h, TFT_DARKGREY);
-    sliders[i]->setSliderPosition(currentFanSpeeds[i]);
-    param.startPosition = int16_t(currentFanSpeeds[i]);
     
-    sliders[i]->drawSlider(20, 80 + yOffset, param);
-    
+    // Draw fan labels
+    tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
+
 
   }
 
