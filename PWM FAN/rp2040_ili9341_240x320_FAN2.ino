@@ -261,6 +261,10 @@ void setup() {
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
 
+  // Initialize knob sprite once during setup
+  knob.setColorDepth(8);
+  knob.createSprite(30, 40);
+ 
   // Initialize LittleFS and load saved brightness
   if (!LittleFS.begin()) {
     LittleFS.format();
@@ -288,11 +292,6 @@ void setup() {
 
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
-
-  // Initialize the knob sprite early
-  knob.setColorDepth(8);
-  knob.createSprite(30, 40);  // Size for the slider knob
-  knob.fillSprite(TFT_BLACK);
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
@@ -643,8 +642,6 @@ void displayLEDControl() {
   bool currentState = neopixelState; // Store current state to detect changes
   tft.fillScreen(TFT_BLACK);
 
-
-
   tft.setTextColor(TFT_WHITE);
   
   // Draw LED status
@@ -669,8 +666,7 @@ void displayFanControl(uint8_t fanIndex) {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
-      // Ensure knob sprite is ready
-  if (!knob.created()) knob.createSprite(30, 40);
+  
   // Create slider parameters
   slider_t param;
   param.slotWidth = 10;
@@ -697,17 +693,18 @@ void displayFanControl(uint8_t fanIndex) {
     
     // Draw current speed percentage
     tft.setTextColor(TFT_GREEN);
-    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 80 + yOffset);
+    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
     tft.setTextColor(TFT_WHITE);
-    
-    param.startPosition = int16_t(currentFanSpeeds[i]);
-    sliders[i]->drawSlider(20, 80 + yOffset, param);
-    
-    int16_t x, y;
+        int16_t x, y;
     uint16_t w, h;
     sliders[i]->getBoundingRect(&x, &y, &w, &h);
     tft.drawRect(x, y, w, h, TFT_DARKGREY);
     sliders[i]->setSliderPosition(currentFanSpeeds[i]);
+    param.startPosition = int16_t(currentFanSpeeds[i]);
+    
+    sliders[i]->drawSlider(20, 80 + yOffset, param);
+    
+
   }
 
   // Add sync checkbox
@@ -742,6 +739,7 @@ void displayFanControl(uint8_t fanIndex) {
     if (pressed) {
       for (int i = 0; i < 3; i++) {
         if (sliders[i]->checkTouch(t_x, t_y)) {
+          delay(10); // Small delay for stable touch reading
           float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
           currentFanSpeeds[i] = fanSpeed;
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
@@ -759,7 +757,7 @@ void displayFanControl(uint8_t fanIndex) {
               int yOffset = j * 90;
               tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
               tft.setTextColor(TFT_GREEN);
-              tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 40 + yOffset);
+              tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 60 + yOffset);
               tft.setTextColor(TFT_WHITE);
             }
           } else {
@@ -768,7 +766,7 @@ void displayFanControl(uint8_t fanIndex) {
             int yOffset = i * 90;
             tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
             tft.setTextColor(TFT_GREEN);
-            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 40 + yOffset);
+            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
             tft.setTextColor(TFT_WHITE);
           }
         }
