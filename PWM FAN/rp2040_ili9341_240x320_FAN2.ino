@@ -464,6 +464,12 @@ void displayLoadingScreen() {
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
   
+  if (screen != 0) {  // Only show back button when not on main menu
+    tft.setFreeFont(LABEL2_FONT);
+    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+    screenButton.drawButton();
+  }
+
   if (neopixelState) {  // Only update NeoPixel if it's enabled
     setNeoPixelColor(screen);  // Update NeoPixel color
   }
@@ -496,13 +502,6 @@ void displayScreen(int screen) {  // Update screen display logic
     case 8:
       displayInfoScreen();  // Display system information screen
       break;
-  }
-
-  // Draw the screen switch button
-  if(screen!=0){
-    tft.setFreeFont(LABEL2_FONT);
-    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
-    screenButton.drawButton();
   }
 }
 
@@ -539,6 +538,10 @@ void displayScreen1() {
 void displayScreen2() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
+  
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
   
   // Ensure knob sprite is ready
   if (!knob.created()) knob.createSprite(30, 40);
@@ -686,24 +689,21 @@ void displayFanControl(uint8_t fanIndex) {
   param.sliderRB = 100;
   param.sliderDelay = 0;
   
+    int16_t x, y;
+    uint16_t w, h;
+    slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
 
   SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
   
   for (int i = 0; i < 3; i++) {
     int yOffset = i * 90;  // Space between fan controls
-        
-    int16_t x, y;
-    uint16_t w, h;
-    sliders[i]->getBoundingRect(&x, &y, &w, &h);
-    tft.drawRect(x, y, w, h, TFT_DARKGREY);
-
+      
   
         // Initialize slider position before drawing
     param.startPosition = float(currentFanSpeeds[i]*100);
 
     sliders[i]->drawSlider(20, 80 + yOffset, param);
     sliders[i]->setSliderPosition(currentFanSpeeds[i]);
-  
   
 
     // Draw current speed percentage
@@ -713,8 +713,11 @@ void displayFanControl(uint8_t fanIndex) {
     
     // Draw fan labels
     tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
-
-
+    
+    int16_t x, y;
+    uint16_t w, h;
+    sliders[i]->getBoundingRect(&x, &y, &w, &h);
+    tft.drawRect(x, y, w, h, TFT_DARKGREY);
   }
 
   // Add sync checkbox
@@ -752,6 +755,8 @@ void displayFanControl(uint8_t fanIndex) {
           delay(10); // Small delay for stable touch reading
           float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
           currentFanSpeeds[i] = fanSpeed;
+          tft.fillRect(150, 40 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage
+          tft.fillRect(150, 60 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage text area
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
           saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
@@ -766,6 +771,7 @@ void displayFanControl(uint8_t fanIndex) {
               // Update percentage displays for all fans
               int yOffset = j * 90;
               tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+              tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
               tft.setTextColor(TFT_GREEN);
               tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 60 + yOffset);
               tft.setTextColor(TFT_WHITE);
@@ -775,6 +781,7 @@ void displayFanControl(uint8_t fanIndex) {
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
             int yOffset = i * 90;
             tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
             tft.setTextColor(TFT_GREEN);
             tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
             tft.setTextColor(TFT_WHITE);
@@ -847,6 +854,7 @@ void handleFileButtonPress(uint8_t index) {
 }
 
 void displayFileContents(String fileName) {
+      uint16_t t_x = 0, t_y = 0;
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
@@ -873,7 +881,7 @@ void displayFileContents(String fileName) {
   backButton.drawButton();
 
   while (true) {
-    uint16_t t_x = 0, t_y = 0;
+
     bool pressed = tft.getTouch(&t_x, &t_y);
 
     backButton.press(pressed && backButton.contains(t_x, t_y));
