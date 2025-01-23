@@ -415,7 +415,7 @@ void loop(void) {
       if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
         lastButtonPress = currentTime;
         // Return to main menu for screens 2, 4, and 7
-        if (currentScreen == 2 || currentScreen == 4 || currentScreen == 7) {
+        if (currentScreen == 2 || currentScreen == 4 || currentScreen == 7 || currentScreen == 8) {
           currentScreen = 0;
         } else currentScreen = 0;
         displayScreen(currentScreen);
@@ -945,11 +945,25 @@ void displayInfoScreen() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(1);
-  tft.setCursor(10, 30);
-  tft.print("System");
+  
+  // Draw back button that returns to Settings
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+
+  // Rest of header
+  tft.setCursor(10, 20);
+  tft.print("System Info");
   tft.setFreeFont(LABEL2_FONT);
   
+  // Display RP2040 temperature
+  tft.setCursor(10, 70);
+  tft.print("Temp: ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(analogReadTemp());
+  tft.print(" C");
+  
   // Display CPU frequency
+  tft.setTextColor(TFT_WHITE);
   tft.setCursor(10, 50);
   tft.print("CPU: ");
   tft.setTextColor(TFT_GREEN);
@@ -958,15 +972,15 @@ void displayInfoScreen() {
   
   // Display free heap memory
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 90);
+  tft.setCursor(10, 110);
   tft.print("Free RAM: ");
   tft.setTextColor(TFT_GREEN);
-  tft.print(rp2040.getFreeHeap() / 1024);
-  tft.print(" KB");
+  tft.print(rp2040.getFreeHeap()/1024);
+  tft.print(" Kbytes");
   
   // Display LittleFS information
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 130);
+  tft.setCursor(10, 150);
   tft.print("Files: ");
   
   // Count files in root directory
