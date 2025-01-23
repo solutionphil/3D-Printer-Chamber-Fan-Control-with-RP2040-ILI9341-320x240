@@ -50,13 +50,20 @@ char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
 
+// Fan PWM pins
+#define FAN1_PIN 27
+#define FAN2_PIN 28
+#define FAN3_PIN 29
+bool syncFans = false;
+float fan1Duty = 50, fan2Duty = 50, fan3Duty = 50;
+RP2040_PWM* Fan1_PWM, *Fan2_PWM, *Fan3_PWM;
+
 // Initialize TFT and slider objects
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
-SliderWidget slider = SliderWidget(&tft, &knob);
+TFT_eSprite menuSprite = TFT_eSprite(&tft); // Create TFT sprite for menu
 
-// Create sprite for main menu
-TFT_eSprite menuSprite = TFT_eSprite(&tft);
+SliderWidget slider = SliderWidget(&tft, &knob);
 
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1"
@@ -197,6 +204,7 @@ void setup() {
   Wire1.begin();
 
   // Initialize menu sprite
+  menuSprite.setColorDepth(8);
   menuSprite.createSprite(240, 320);
 
   // Initialize LittleFS and load saved brightness
@@ -226,6 +234,11 @@ void setup() {
 
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
+  
+  // Initialize Fan PWM instances
+  Fan1_PWM = new RP2040_PWM(FAN1_PIN, frequency, fan1Duty);
+  Fan2_PWM = new RP2040_PWM(FAN2_PIN, frequency, fan2Duty);
+  Fan3_PWM = new RP2040_PWM(FAN3_PIN, frequency, fan3Duty);
 
   // Initialize the knob sprite early
   knob.setColorDepth(8);
@@ -303,20 +316,76 @@ void loop(void) {
       displayLEDControl();
       delay(500);
     }
-  } else if (currentScreen == 2) {
+  } else if (currentScreen == 1) {
     if (pressed) {
-      if (slider.checkTouch(t_x, t_y)) {
-        // Handle slider touch logic
-        dutyCycle = round(slider.getSliderPosition() / 10) * 10; // Snap to nearest 10% increment
-        slider.setSliderPosition(dutyCycle); // Update slider position to snapped value
-        PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        saveBrightness(dutyCycle);  // Save the new brightness value
-        // Update percentage display
-        tft.fillRect(90, 110, 80, 30, TFT_BLACK);
-        tft.setTextColor(TFT_GREEN);
-        tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+      // Clear previous percentage displays
+      tft.fillRect(30, 270, 40, 20, TFT_BLACK);
+      tft.fillRect(110, 270, 40, 20, TFT_BLACK);
+      tft.fillRect(190, 270, 40, 20, TFT_BLACK);
+      
+      // Clear previous slider knobs
+      tft.fillRect(35, 60, 40, 200, TFT_BLACK);
+      tft.fillRect(115, 60, 40, 200, TFT_BLACK);
+      tft.fillRect(195, 60, 40, 200, TFT_BLACK);
+      
+      // Check for sync checkbox touch
+      if (t_x >= 85 && t_x <= 100 && t_y >= 290 && t_y <= 305) {
+        syncFans = !syncFans;
+        displayScreen1();  // Redraw screen to update checkbox
+        delay(200);  // Debounce
       }
+      
+      // Handle slider touches
+      int newDuty;
+      if (t_x >= 30 && t_x <= 50) {  // Fan 1 slider
+        newDuty = map(t_y, 60, 260, 100, 0);
+        newDuty = constrain(newDuty, 0, 100);
+        fan1Duty = newDuty;
+        if (syncFans) {
+          fan2Duty = fan3Duty = newDuty;
+        }
+      }
+      else if (t_x >= 110 && t_x <= 130) {  // Fan 2 slider
+        newDuty = map(t_y, 60, 260, 100, 0);
+        newDuty = constrain(newDuty, 0, 100);
+        fan2Duty = newDuty;
+        if (syncFans) {
+          fan1Duty = fan3Duty = newDuty;
+        }
+      }
+      else if (t_x >= 190 && t_x <= 210) {  // Fan 3 slider
+        newDuty = map(t_y, 60, 260, 100, 0);
+        newDuty = constrain(newDuty, 0, 100);
+        fan3Duty = newDuty;
+        if (syncFans) {
+          fan1Duty = fan2Duty = newDuty;
+        }
+      }
+      
+      // Update PWM outputs
+      Fan1_PWM->setPWM(FAN1_PIN, frequency, fan1Duty);
+      Fan2_PWM->setPWM(FAN2_PIN, frequency, fan2Duty);
+      Fan3_PWM->setPWM(FAN3_PIN, frequency, fan3Duty);
+      
+      displayScreen1();  // Update display
     }
+  } else if (currentScreen == 2) {
+    static uint32_t lastUpdate = 0;
+    const uint32_t UPDATE_INTERVAL = 100; // 100ms between updates
+
+    if (millis() - lastUpdate < UPDATE_INTERVAL) {
+      return;
+    }
+    lastUpdate = millis();
+
+    // Clear screen and set up title
+    tft.fillScreen(TFT_BLACK);
+    
+    // Clear previous value display
+    tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+    
+    // Update brightness immediately
+    PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
   }
 
   // Check for touch on the screen switch button
@@ -388,7 +457,7 @@ void displayScreen(int screen) {  // Update screen display logic
       drawMainMenu();
       break;
     case 1:
-      displayScreen1();  // Display screen 1
+      displayScreen1();  // Display fan control screen
       break;
     case 2:
       displayScreen2();
@@ -428,7 +497,7 @@ void drawMainMenu() {
   menuSprite.print("Main Menu");
 
   // Initialize buttons with menuSprite instead of tft
-  mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 1", 1);
+  mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fan Control", 1);
   mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
   mainMenuButtons[2].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
@@ -441,31 +510,68 @@ void drawMainMenu() {
 }
 
 void displayScreen1() {
-  tft.setTextColor(TFT_WHITE);
+  tft.fillScreen(TFT_BLACK);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
-  tft.setCursor(10, 20);
-  tft.print("Screen 1");
+  tft.setTextColor(TFT_CYAN);
+  tft.drawString("Fan Control", 10, 20);
+
+  // Draw slider backgrounds
+  tft.fillRect(40, 60, 10, 200, TFT_DARKGREY);
+  tft.fillRect(120, 60, 10, 200, TFT_DARKGREY);
+  tft.fillRect(200, 60, 10, 200, TFT_DARKGREY);
+
+  // Draw slider knobs
+  tft.fillRect(35, map(fan1Duty, 0, 100, 260, 60), 20, 20, TFT_WHITE);
+  tft.fillRect(115, map(fan2Duty, 0, 100, 260, 60), 20, 20, TFT_WHITE);
+  tft.fillRect(195, map(fan3Duty, 0, 100, 260, 60), 20, 20, TFT_WHITE);
+
+  // Labels for fans
+  tft.setTextColor(TFT_WHITE);
+  tft.drawString("Fan 1", 30, 250);
+  tft.drawString("Fan 2", 110, 250);
+  tft.drawString("Fan 3", 190, 250);
+
+  // Duty cycle displays
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(int(fan1Duty)) + "%", 35, 270);
+  tft.drawString(String(int(fan2Duty)) + "%", 115, 270);
+  tft.drawString(String(int(fan3Duty)) + "%", 195, 270);
+
+  // Sync checkbox
+  tft.fillRect(85, 290, 15, 15, TFT_WHITE);
+  if (syncFans) {
+    tft.drawLine(85, 290, 100, 305, TFT_BLUE);
+    tft.drawLine(85, 305, 100, 290, TFT_BLUE);
+  }
+  tft.setTextColor(TFT_WHITE);
+  tft.drawString("Sync Fans", 110, 290);
 }
 
 void displayScreen2() {
+  static uint32_t lastUpdate = 0;
+  const uint32_t UPDATE_INTERVAL = 100; // 100ms between updates
+
+  if (millis() - lastUpdate < UPDATE_INTERVAL) {
+    return;
+  }
+  lastUpdate = millis();
+
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
   
-  // Ensure knob sprite is ready
-  if (!knob.created()) knob.createSprite(30, 40);
+  // Clear previous value display
+  tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+  
+  // Update brightness immediately
+  PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
   
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(0);
   tft.drawString("Brightness", 30, 50);
 
-  // Update percentage display
-  tft.fillRect(90, 110, 80, 30, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
-  tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
-
-  // Create slider parameters
+  // Draw the slider
   slider_t param;
   
   // Slider slot parameters
