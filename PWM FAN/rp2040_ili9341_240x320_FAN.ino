@@ -6,18 +6,18 @@
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
- * It provides a touch-based UI with multiple screens, PWM-based brightness control, and a file explorer
- * using LittleFS. The program includes features like touch calibration, slider-based brightness adjustment,
- * and file management.
+ * It provides a touch-based UI with multiple screens, PWM-based brightness control, PWM-based fan control,
+ * and a file explorer using LittleFS. The program includes features like touch calibration, slider-based
+ * brightness and fan speed adjustment, and file management.
  *
  * Hardware:
  * - RP2040 microcontroller
  * - ILI9341 TFT display with touch screen
- * - PWM pin for brightness control
+ * - PWM pins for brightness control and fan control
  *
  * Libraries:
  * - TFT_eSPI: For TFT display control
- * - RP2040_PWM: For PWM-based brightness control
+ * - RP2040_PWM: For PWM-based brightness and fan speed control
  * - Adafruit_NeoPixel: For NeoPixel control
  * - Wire: For I2C communication
  */
@@ -29,10 +29,10 @@
 #include "RP2040_PWM.h"   // PWM library
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h>
-#include <vector>
 
-#define BRIGHTNESS_UPDATE_DELAY 50  // Delay between brightness updates in ms
-unsigned long lastBrightnessUpdate = 0;  // Track last brightness update time
+// PWM frequencies
+float frequency = 1831;      // For brightness control
+float fanFrequency = 20000;  // Separate frequency for fans
 
 // Debounce control
 unsigned long lastButtonPress = 0;
@@ -41,42 +41,31 @@ const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 #define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
-const int totalScreens = 7;  // Increase total screens for info screen
-char settingsLabels[4][20] = {"Light", "Files", "LED", "System"};  // Add LED control option and system info
+const int totalScreens = 8;  // Increase total screens for info screen and fan control
+char settingsLabels[5][20] = {"Light", "Files", "LED", "System"};  // Removed "Fans" from Settings menu
 
 // LED control button labels
 char ledOnLabel[] = "Turn ON";
 char ledOffLabel[] = "Turn OFF";
 
-// Navigation and dialog button labels
+// Navigation and dialog button labels (updated)
 char backButtonLabel[] = "Back";
 char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
 
-// Fan PWM pins
-#define FAN1_PIN 27
-#define FAN2_PIN 28
-#define FAN3_PIN 29
-bool syncFans = false;
-float fan1Duty = 50, fan2Duty = 50, fan3Duty = 50;
-RP2040_PWM* Fan1_PWM, *Fan2_PWM, *Fan3_PWM;
-
-// Initialize TFT and slider objects
+// Initialize TFT and slider objects (updated for Fans in Main Menu)
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
-TFT_eSprite sliderSprite = TFT_eSprite(&tft); // Create sprite for slider background
+SliderWidget slider1 = SliderWidget(&tft, &knob);
+SliderWidget slider2 = SliderWidget(&tft, &knob);
+SliderWidget slider3 = SliderWidget(&tft, &knob);
 
-// Fan control sprites
-TFT_eSprite fanKnob1 = TFT_eSprite(&tft);
-TFT_eSprite fanKnob2 = TFT_eSprite(&tft);
-TFT_eSprite fanKnob3 = TFT_eSprite(&tft);
-TFT_eSprite menuSprite = TFT_eSprite(&tft); // Create TFT sprite for menu
-
-SliderWidget slider = SliderWidget(&tft, &knob);
+// Create sprite for main menu
+TFT_eSprite menuSprite = TFT_eSprite(&tft);
 
 #define _PWM_LOGLEVEL_        1
-#define CALIBRATION_FILE "/TouchCalData1"
+#define CALIBRATION_FILE "/TouchCalData1" // Calibration data file
 #define REPEAT_CAL false
 #define pinToUse      7
 #define BRIGHTNESS_FILE "/brightness.txt"
@@ -108,13 +97,27 @@ uint32_t currentColor = 0;
 // Fonts for key labels
 #define LABEL1_FONT &FreeSansOblique12pt7b // Key label font 1 
 #define LABEL2_FONT &FreeSansBold9pt7b    // Key label font 2
+#define LABEL3_FONT &TomThumb  //
+#define LABEL4_FONT &FreeSerifBold9pt7b    
+#define LABEL5_FONT &FreeMonoBold9pt7b
 
 RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
-float frequency = 1831;  // Increased to 1831Hz to reduce flickering
-float frequency2 = 20000;  // Increased to 20kHz 
 float dutyCycle; //= 90;  // Default brightness value
+
+// PWM Fan Control
+#define FAN1_PIN 27
+#define FAN2_PIN 28
+#define FAN3_PIN 29
+#define FAN_SETTINGS_FILE "/fan_settings.txt"
+RP2040_PWM* Fan_PWM[3];
+
+// Global array to store current fan speeds
+float currentFanSpeeds[3] = {0.0, 0.0, 0.0};
+
+// Fan sync control
+bool fanSyncEnabled = false;
 
 TFT_eSPI_Button screenButton;  // Button to switch screens
 TFT_eSPI_Button fileButtons[10]; // Buttons for file explorer
@@ -170,6 +173,48 @@ bool loadLEDState() {
   return false; // Default LED state to OFF if file doesn't exist
 }
 
+void saveFanSpeeds(float speeds[3]) {
+  File f = LittleFS.open(FAN_SETTINGS_FILE, "w");
+  if (f) {
+    Serial.println("Saving fan speeds to file");
+    // Write each speed on a new line
+    for (int i = 0; i < 3; i++) {
+      Serial.printf("Saving Fan %d: %.1f%%\n", i+1, speeds[i]);
+      f.println(speeds[i]);
+    }
+    f.close();
+    Serial.println("Fan speeds saved successfully");
+  } else {
+    Serial.println("Failed to open fan settings file for writing");
+  }
+}
+
+void loadFanSpeeds(float speeds[3]) {
+
+  // Initialize with default values
+  for (int i = 0; i < 3; i++) {
+    speeds[i] = 0.0;
+  }
+  
+  if (LittleFS.exists(FAN_SETTINGS_FILE)) {
+    Serial.println("Loading fan speeds from file");
+    File f = LittleFS.open(FAN_SETTINGS_FILE, "r");
+    if (f) {
+      for (int i = 0; i < 3; i++) {
+        String val = f.readStringUntil('\n');
+        Serial.printf("Read value for Fan %d: %s\n", i+1, val.c_str());
+        if (val.length() > 0) {
+          speeds[i] = constrain(val.toFloat(), 0, 100);
+        }
+      }
+      f.close();
+      Serial.println("Fan speeds loaded successfully");
+    } else {
+      Serial.println("Failed to open fan settings file for reading");
+    }
+  }
+}
+
 void setNeoPixelColor(int screenNumber) {
   if (!neopixelState) return; // Don't change colors if LED is off
 
@@ -195,7 +240,10 @@ void setNeoPixelColor(int screenNumber) {
     case 6: // LED Control
       pixels.setPixelColor(0, pixels.Color(255, 255, 255)); // White
       break;
-    case 7: // System Info
+    case 7: // Fan Control
+      pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
+      break;
+    case 8: // System Info
       pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
       break;
   }
@@ -211,13 +259,19 @@ void setup() {
   Wire.begin();
   
   // Initialize I2C1 with proper constructor
-  TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
+  //TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
+  //Wire1.begin();
+  Wire1.setSDA(I2C1_SDA);
+  Wire1.setSCL(I2C1_SCL);
   Wire1.begin();
 
   // Initialize menu sprite
-  menuSprite.setColorDepth(8);
   menuSprite.createSprite(240, 320);
 
+  // Initialize knob sprite once during setup
+  knob.setColorDepth(8);
+  knob.createSprite(30, 40);
+ 
   // Initialize LittleFS and load saved brightness
   if (!LittleFS.begin()) {
     LittleFS.format();
@@ -245,27 +299,24 @@ void setup() {
 
   // Set up PWM for brightness control
   PWM_Instance = new RP2040_PWM(pinToUse, frequency, dutyCycle);
-  
-  // Initialize Fan PWM instances
-  Fan1_PWM = new RP2040_PWM(FAN1_PIN, frequency2, fan1Duty);
-  Fan2_PWM = new RP2040_PWM(FAN2_PIN, frequency2, fan2Duty);
-  Fan3_PWM = new RP2040_PWM(FAN3_PIN, frequency2, fan3Duty);
-
-  // Initialize the knob sprite early
-  knob.setColorDepth(8);
-  knob.createSprite(30, 40);  // Size for the slider knob
-  sliderSprite.setColorDepth(8);
-  sliderSprite.createSprite(240, 320);  // Full screen sprite
-  
-  // Initialize fan control knob sprites
-  fanKnob1.createSprite(20, 20);
-  fanKnob2.createSprite(20, 20);
-  fanKnob3.createSprite(20, 20);
 
   delay(1000);
   PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
 
-  // Initialize the TFT display and set its rotation
+  // Initialize PWM for fans
+  for (int i = 0; i < 3; i++) {
+    Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, fanFrequency, 0);
+  }
+
+  // Load saved fan speeds
+  float fanSpeeds[3] = {0, 0, 0};
+  loadFanSpeeds(fanSpeeds);
+  for (int i = 0; i < 3; i++) {
+    currentFanSpeeds[i] = fanSpeeds[i];
+    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
+  }
+
+  // Initialize the TFT display and set its rotation (Main Menu updated)
   tft.init();  
   tft.setRotation(0);  
 
@@ -279,29 +330,28 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
-  if (currentScreen == 0) {  // Main menu screen
-    for (uint8_t b = 0; b < 3; b++) {
+  if (currentScreen == 0) {  // Main menu screen (System Info removed)
+    for (uint8_t b = 0; b < 3; b++) {  // Adjusted loop to 3 buttons
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
     }
 
-    for (uint8_t b = 0; b < 3; b++) {
+    for (uint8_t b = 0; b < 3; b++) {  // Adjusted loop to 3 buttons
       if (mainMenuButtons[b].justReleased()) mainMenuButtons[b].drawButton();  // Draw normal state
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
         if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = currentTime + 250; // Add extra delay for button presses
           switch(b) {
-            case 0: currentScreen = 1; break;  // Screen 1
+            case 0: currentScreen = 7; break;  // Fans (moved from Settings)
             case 1: currentScreen = 3; break;  // Screen 3
             case 2: currentScreen = 5; break;  // Settings
-            default: break;
           }
           displayScreen(currentScreen);  // Display the selected screen
         }
       }
     }
-  } else if (currentScreen == 5) {
-    for (uint8_t b = 0; b < 4; b++) {
+  } else if (currentScreen == 5) {  // Settings menu
+    for (uint8_t b = 0; b < 4; b++) {  // Adjusted to 4 buttons for Settings
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
@@ -313,7 +363,7 @@ void loop(void) {
             currentScreen = 4;
           }
           else if (b == 2) currentScreen = 6;  // LED Control
-          else if (b == 3) currentScreen = 7;  // System Info
+          else if (b == 3) currentScreen = 8;  // System Info
           displayScreen(currentScreen);
         }
       }
@@ -333,75 +383,29 @@ void loop(void) {
       displayLEDControl();
       delay(500);
     }
-  } else if (currentScreen == 1) {
-    if (pressed) {
-      // Clear previous percentage displays
-      tft.fillRect(30, 270, 40, 20, TFT_BLACK);
-      tft.fillRect(110, 270, 40, 20, TFT_BLACK);
-      tft.fillRect(190, 270, 40, 20, TFT_BLACK);
-      
-      // Clear previous slider knobs
-      tft.fillRect(35, 60, 40, 200, TFT_BLACK);
-      tft.fillRect(115, 60, 40, 200, TFT_BLACK);
-      tft.fillRect(195, 60, 40, 200, TFT_BLACK);
-      
-      // Check for sync checkbox touch
-      if (t_x >= 85 && t_x <= 100 && t_y >= 290 && t_y <= 305) {
-        syncFans = !syncFans;
-        displayScreen1();  // Redraw screen to update checkbox
-        delay(200);  // Debounce
-      }
-      
-      // Handle slider touches
-      int newDuty;
-      if (t_x >= 30 && t_x <= 50) {  // Fan 1 slider
-        newDuty = map(t_y, 60, 260, 100, 0);
-        newDuty = constrain(newDuty, 0, 100);
-        fan1Duty = newDuty;
-        if (syncFans) {
-          fan2Duty = fan3Duty = newDuty;
+  } else if (currentScreen == 7) {
+    for (uint8_t b = 0; b < 3; b++) {
+      mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
+      if (mainMenuButtons[b].justPressed()) {
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = currentTime;
+          displayFanControl(b);
         }
       }
-      else if (t_x >= 110 && t_x <= 130) {  // Fan 2 slider
-        newDuty = map(t_y, 60, 260, 100, 0);
-        newDuty = constrain(newDuty, 0, 100);
-        fan2Duty = newDuty;
-        if (syncFans) {
-          fan1Duty = fan3Duty = newDuty;
-        }
-      }
-      else if (t_x >= 190 && t_x <= 210) {  // Fan 3 slider
-        newDuty = map(t_y, 60, 260, 100, 0);
-        newDuty = constrain(newDuty, 0, 100);
-        fan3Duty = newDuty;
-        if (syncFans) {
-          fan1Duty = fan2Duty = newDuty;
-        }
-      }
-      
-      // Update PWM outputs
-      Fan1_PWM->setPWM(FAN1_PIN, frequency, fan1Duty);
-      Fan2_PWM->setPWM(FAN2_PIN, frequency, fan2Duty);
-      Fan3_PWM->setPWM(FAN3_PIN, frequency, fan3Duty);
-      
-      displayScreen1();  // Update display
     }
   } else if (currentScreen == 2) {
     if (pressed) {
-      unsigned long currentTime = millis();
-      if (currentTime - lastBrightnessUpdate >= BRIGHTNESS_UPDATE_DELAY) {
-        lastBrightnessUpdate = currentTime;
-        
-        if (slider.checkTouch(t_x, t_y)) {
-          float newDutyCycle = round(slider.getSliderPosition() / 10) * 10;
-          if (newDutyCycle != dutyCycle) {
-            dutyCycle = newDutyCycle;
-            slider.setSliderPosition(dutyCycle);
-            PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-            saveBrightness(dutyCycle);
-          }
-        }
-        displayScreen2();
+      if (slider1.checkTouch(t_x, t_y)) {
+        // Handle slider touch logic
+        dutyCycle = round(slider1.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
+        slider1.setSliderPosition(dutyCycle); // Update slider position to snapped value
+        PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+        saveBrightness(dutyCycle);  // Save the new brightness value
+        // Update percentage display
+        tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+        tft.setTextColor(TFT_GREEN);
+        tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
       }
     }
   }
@@ -416,9 +420,9 @@ void loop(void) {
       unsigned long currentTime = millis();
       if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
         lastButtonPress = currentTime;
-        // Return to settings screen for screens 2 and 4
-        if (currentScreen == 2 || currentScreen == 4) {
-          currentScreen = 5;
+        // Return to main menu for screens 2, 4, and 7
+        if (currentScreen == 2 || currentScreen == 4 || currentScreen == 7 || currentScreen == 8) {
+          currentScreen = 0;
         } else currentScreen = 0;
         displayScreen(currentScreen);
       }
@@ -465,61 +469,65 @@ void displayLoadingScreen() {
 
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
+   // tft.fillRectVGradient(0, 0, 240, 320, TFT_CYAN, TFT_BROWN);
   
+  if (screen != 0) {  // Only show back button when not on main menu
+    tft.setFreeFont(LABEL2_FONT);
+    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+    screenButton.drawButton();
+  }
+
   if (neopixelState) {  // Only update NeoPixel if it's enabled
     setNeoPixelColor(screen);  // Update NeoPixel color
   }
 
   switch (screen) {
     case 0:
-      drawMainMenu();
+      drawMainMenu(); // Display Main Menu
       break;
     case 1:
-      displayScreen1();  // Display fan control screen
+      displayScreen1();  // Display screen 1
       break;
     case 2:
-      displayScreen2();
+      displayBGBrightness(); // Display Backlight Control screen
       break;
     case 3:
       displayScreen3();
       break;
     case 4:
-      displayScreen4();  // Display file explorer
+      displayFileExplorer();  // Display file explorer
       break;
     case 5:
-      displayScreen5();  // Display Settings
+      displaySettings();  // Display settings
       break;
     case 6:
       displayLEDControl();  // Display LED Control screen
       break;
     case 7:
+      displayFanControl(0);  // Display Fan Control screen
+      break;
+    case 8:
       displayInfoScreen();  // Display system information screen
       break;
-  }
-
-  // Draw the screen switch button
-  if(screen!=0){
-    tft.setFreeFont(LABEL2_FONT);
-    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
-    screenButton.drawButton();
   }
 }
 
 void drawMainMenu() {
   // Draw to sprite instead of directly to screen
-  menuSprite.fillSprite(TFT_BLACK);
+  menuSprite.fillSprite(TFT_DARKCYAN);
   menuSprite.setTextColor(TFT_WHITE);
-  menuSprite.setFreeFont(LABEL2_FONT);
+  menuSprite.setFreeFont(&Yellowtail_32);
   menuSprite.setTextSize(1);
-  menuSprite.setCursor(10, 50);
+  menuSprite.setCursor(50, 50);
   menuSprite.print("Main Menu");
+    menuSprite.setFreeFont(LABEL2_FONT);
 
   // Initialize buttons with menuSprite instead of tft
-  mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fan Control", 1);
+  mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
   mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
-  mainMenuButtons[2].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
+  mainMenuButtons[2].initButton(&menuSprite, 120, 300, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
-  for (uint8_t i = 0; i < 3; i++) {
+  for (uint8_t i = 0; i < 3; i++) {  // Adjusted loop to 3 buttons
     mainMenuButtons[i].drawButton();
   }
   
@@ -528,96 +536,64 @@ void drawMainMenu() {
 }
 
 void displayScreen1() {
-  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 20);
+  tft.print("Screen 1");
+}
+
+void displayBGBrightness() {
+  // Clear screen and set up title
+  tft.fillScreen(TFT_BLACK);
   
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
-
-  // Title
-  tft.setTextColor(TFT_WHITE);
-  tft.drawString("Fan Control", 20, 30);
-
-  // Draw slider backgrounds
-  for(int i = 0; i < 3; i++) {
-    int x = 40 + (i * 80);
-    tft.fillRect(x, 60, 10, 200, TFT_DARKGREY);
-  }
-
-  // Draw slider knobs
-  drawFanKnob(&fanKnob1, fan1Duty, 35);
-  drawFanKnob(&fanKnob2, fan2Duty, 115);
-  drawFanKnob(&fanKnob3, fan3Duty, 195);
-
-  // Labels for fans
-  tft.setTextColor(TFT_WHITE);
-  tft.drawString("Fan 1", 30, 250);
-  tft.drawString("Fan 2", 110, 250);
-  tft.drawString("Fan 3", 190, 250);
-
-  // Duty cycle displays
-  tft.setTextColor(TFT_GREEN);
-  tft.drawString(String(int(fan1Duty)) + "%", 35, 270);
-  tft.drawString(String(int(fan2Duty)) + "%", 115, 270);
-  tft.drawString(String(int(fan3Duty)) + "%", 195, 270);
-
-  // Sync checkbox
-  tft.fillRect(85, 290, 15, 15, TFT_WHITE);
-  if (syncFans) {
-    tft.drawLine(85, 290, 100, 305, TFT_BLUE);
-    tft.drawLine(85, 305, 100, 290, TFT_BLUE);
-  }
-  tft.setTextColor(TFT_WHITE);
-  tft.drawString("Sync Fans", 110, 290);
-}
-
-void drawFanKnob(TFT_eSprite* knob, float duty, int x) {
-  int y = map(duty, 0, 100, 260, 60);
   
-  knob->fillSprite(TFT_BLACK);
-  knob->fillRoundRect(0, 0, 20, 20, 5, TFT_WHITE);
-  knob->drawRoundRect(0, 0, 20, 20, 5, TFT_BLUE);
+  // Ensure knob sprite is ready
+  if (!knob.created()) knob.createSprite(30, 40);
   
-  // Add visual indicator
-  knob->fillRect(9, 2, 2, 16, TFT_BLUE);
-  knob->fillRect(2, 9, 16, 2, TFT_BLUE);
-  
-  // Push sprite to screen
-  knob->pushSprite(x, y);
-}
-
-void displayScreen2() {
-  static float lastDutyCycle = -1;
-  static bool sliderInitialized = false;
-
-  tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(0);
   tft.drawString("Brightness", 30, 50);
 
-  // Initialize slider only once
-  if (!sliderInitialized) {
-    slider.setSliderScale(0, 100);  // Set scale from 0 to 100
-    slider.initSliderVertical(100, 80, 200, 30);  // x, y, length, width
-    slider.setSliderPosition(dutyCycle);
-    sliderInitialized = true;
-  }
+  // Update percentage display
+  tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
 
-  // Draw slider background
-  tft.fillRect(100, 80, 30, 200, TFT_DARKGREY);  // Vertical background
+  // Create slider parameters
+  slider_t param;
   
-  // Draw slider itself
-  slider.drawSlider(100, 80);
+  // Slider slot parameters
+  param.slotWidth = 10;
+  param.slotLength = 200;
+  param.slotColor = TFT_BLUE;
+  param.slotBgColor = TFT_YELLOW;
+  param.orientation = H_SLIDER;
   
-  // Update slider position if changed
-  if (lastDutyCycle != dutyCycle) {
-    tft.fillRect(90, 290, 80, 30, TFT_BLACK);
-    tft.setTextColor(TFT_GREEN);
-    tft.drawString(String(int(dutyCycle)) + "%", 95, 290);
-    lastDutyCycle = dutyCycle;
-  }
+  // Slider knob parameters
+  param.knobWidth = 20;
+  param.knobHeight = 30;
+  param.knobRadius = 5;
+  param.knobColor = TFT_WHITE;
+  param.knobLineColor = TFT_RED;
+   
+  // Slider range and movement
+  param.sliderLT = 10;
+  param.sliderRB = 100;
+  param.startPosition = int16_t(50);
+  param.sliderDelay = 0;
+  // Draw the slider
+  slider1.drawSlider(20, 160, param);
+
+  int16_t x, y;    // x and y can be negative
+  uint16_t w, h;   // Width and height
+  slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+  slider1.setSliderPosition(dutyCycle);
 }
 
 void displayScreen3() {
@@ -628,7 +604,7 @@ void displayScreen3() {
   tft.print("Screen 3");
 }
 
-void displayScreen4() {
+void displayFileExplorer() {
   tft.fillScreen(TFT_BLACK);
 
   // Additional delay specifically for file explorer to prevent immediate touch processing
@@ -656,7 +632,7 @@ void displayScreen4() {
   }
 }
 
-void displayScreen5() {
+void displaySettings() {
   menuSprite.fillSprite(TFT_BLACK);
   menuSprite.setTextColor(TFT_WHITE);
   menuSprite.setFreeFont(LABEL2_FONT);
@@ -665,7 +641,7 @@ void displayScreen5() {
   menuSprite.print("Settings");
 
   // Initialize settings menu buttons
-  for (int i = 0; i < 4; i++) {  // Changed to 4 for new info button
+  for (int i = 0; i < 4; i++) {  // Changed to 4 for removed "Fans" button
     mainMenuButtons[i].initButton(&menuSprite, 120, 100 + (i * 60), 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, settingsLabels[i], 1);
     mainMenuButtons[i].drawButton();
   }
@@ -676,6 +652,7 @@ void displayScreen5() {
 void displayLEDControl() {
   bool currentState = neopixelState; // Store current state to detect changes
   tft.fillScreen(TFT_BLACK);
+
   tft.setTextColor(TFT_WHITE);
   
   // Draw LED status
@@ -693,6 +670,148 @@ void displayLEDControl() {
   // Redraw the back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
+}
+
+void displayFanControl(uint8_t fanIndex) {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  
+  // Ensure knob sprite is ready
+  if (!knob.created()) knob.createSprite(30, 40);
+
+  // Create slider parameters
+  slider_t param;
+  param.slotWidth = 10;
+  param.slotLength = 200;
+  param.slotColor = TFT_BLUE;
+  param.slotBgColor = TFT_YELLOW;
+  param.orientation = H_SLIDER;
+  param.knobWidth = 20;
+  param.knobHeight = 30;
+  param.knobRadius = 5;
+  param.knobColor = TFT_WHITE;
+  param.knobLineColor = TFT_RED;
+  param.sliderLT = 0;
+  param.sliderRB = 100;
+  param.sliderDelay = 0;
+  
+    int16_t x, y;
+    uint16_t w, h;
+    slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+
+  SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
+  
+  for (int i = 0; i < 3; i++) {
+    int yOffset = i * 90;  // Space between fan controls
+      
+  
+        // Initialize slider position before drawing
+    param.startPosition = float(currentFanSpeeds[i]*100);
+
+    sliders[i]->drawSlider(20, 80 + yOffset, param);
+    sliders[i]->setSliderPosition(currentFanSpeeds[i]);
+  
+
+    // Draw current speed percentage
+    tft.setTextColor(TFT_GREEN);
+    tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+    tft.setTextColor(TFT_WHITE);
+    
+    // Draw fan labels
+    tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
+    
+    int16_t x, y;
+    uint16_t w, h;
+    sliders[i]->getBoundingRect(&x, &y, &w, &h);
+    tft.drawRect(x, y, w, h, TFT_DARKGREY);
+  }
+
+  // Add sync checkbox
+  tft.fillRect(20, 20, 15, 15, TFT_WHITE);
+  tft.drawString("Sync All", 45, 20);
+  if (fanSyncEnabled) {
+    tft.drawLine(20, 20, 35, 35, TFT_BLACK);
+    tft.drawLine(35, 20, 20, 35, TFT_BLACK);
+  }
+
+  // Redraw the back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+
+  while (true) {
+    uint16_t t_x = 0, t_y = 0;
+    bool pressed = tft.getTouch(&t_x, &t_y);
+    
+    // Check for sync checkbox touch
+    if (pressed && t_x >= 20 && t_x <= 35 && t_y >= 20 && t_y <= 35) {
+      fanSyncEnabled = !fanSyncEnabled;
+      // Redraw checkbox
+      tft.fillRect(20, 20, 15, 15, TFT_WHITE);
+      if (fanSyncEnabled) {
+        tft.drawLine(20, 20, 35, 35, TFT_BLACK);
+        tft.drawLine(35, 20, 20, 35, TFT_BLACK);
+      }
+      delay(250); // Debounce delay
+      continue;
+    }
+
+    if (pressed) {
+      for (int i = 0; i < 3; i++) {
+        if (sliders[i]->checkTouch(t_x, t_y)) {
+          delay(10); // Small delay for stable touch reading
+          float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
+          currentFanSpeeds[i] = fanSpeed;
+          tft.fillRect(150, 40 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage
+          tft.fillRect(150, 60 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage text area
+          sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
+          Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
+          saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
+          
+          // If sync is enabled, update all fans
+          if (fanSyncEnabled) {
+            for (int j = 0; j < 3; j++) {
+              currentFanSpeeds[j] = fanSpeed;
+              sliders[j]->setSliderPosition(fanSpeed);
+              Fan_PWM[j]->setPWM(FAN1_PIN + j, fanFrequency, fanSpeed);
+              
+              // Update percentage displays for all fans
+              int yOffset = j * 90;
+              tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+              tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+              tft.setTextColor(TFT_GREEN);
+              tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 60 + yOffset);
+              tft.setTextColor(TFT_WHITE);
+            }
+          } else {
+            // Original single fan update code
+            Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
+            int yOffset = i * 90;
+            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+            tft.setTextColor(TFT_GREEN);
+            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+            tft.setTextColor(TFT_WHITE);
+          }
+        }
+      }
+    }
+
+    screenButton.press(pressed && screenButton.contains(t_x, t_y));
+    if (screenButton.justReleased()) screenButton.drawButton();
+
+    // Switch to the settings screen when the button is pressed
+    if (screenButton.justPressed()) {
+      unsigned long currentTime = millis();
+      if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+        lastButtonPress = currentTime;
+        currentScreen = 0;
+        displayScreen(currentScreen);
+        return;
+      }
+    }
+  }
 }
 
 bool displayDeletionPrompt(String fileName) {
@@ -734,7 +853,7 @@ void handleFileButtonPress(uint8_t index) {
   if (displayDeletionPrompt(fileName)) {
     if (LittleFS.exists(fileName)) {
       LittleFS.remove(fileName);
-      displayScreen4();  // Immediately refresh screen after deletion
+      displayFileExplorer();  // Immediately refresh screen after deletion
       return;
     }
   } else {
@@ -743,6 +862,7 @@ void handleFileButtonPress(uint8_t index) {
 }
 
 void displayFileContents(String fileName) {
+      uint16_t t_x = 0, t_y = 0;
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
@@ -769,13 +889,13 @@ void displayFileContents(String fileName) {
   backButton.drawButton();
 
   while (true) {
-    uint16_t t_x = 0, t_y = 0;
+
     bool pressed = tft.getTouch(&t_x, &t_y);
 
     backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
-      displayScreen4();
+      displayFileExplorer();
       return;
     }
   }
@@ -833,30 +953,68 @@ void displayInfoScreen() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(1);
-  tft.setCursor(10, 30);
-  tft.print("System");
-  tft.setFreeFont(LABEL2_FONT);
   
-  // Display CPU frequency
-  tft.setCursor(10, 50);
+  // Draw back button that returns to Settings
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+
+  // Rest of header
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setCursor(10, 20);
+  tft.print("System Info");
+  tft.setFreeFont(LABEL2_FONT);
+
+   // Display CPU frequency
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 70);
   tft.print("CPU: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(F_CPU / 1000000);
-  tft.print(" MHz");
-  
-  // Display free heap memory
+  tft.print(" MHz"); 
+
+  // Display RP2040 temperature
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(10, 90);
+  tft.print("Temp: ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(analogReadTemp());
+  tft.print(" C");
+
+  // Display free heap memory
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10,110);
   tft.print("Free RAM: ");
   tft.setTextColor(TFT_GREEN);
-  tft.print(rp2040.getFreeHeap() / 1024);
-  tft.print(" KB");
+  tft.print(rp2040.getFreeHeap()/1024);
+  tft.print(" KB/ 260KB");
   
+    // Display LittleFS information
+  tft.setTextColor(TFT_YELLOW);
+  tft.setCursor(10, 140);
+  tft.print("LittleFS: ");
+    tft.setTextColor(TFT_WHITE);
+  tft.setCursor(10, 160);
+  tft.print("Storage: ");
+
+    if(!LittleFS.begin()) {
+      tft.println("LittleFS Mount failed!");
+      while (1);
+    }
+    fs::FSInfo fs_info;
+    LittleFS.info(fs_info);
+    uint32_t totalBytes= fs_info.totalBytes;
+    uint32_t usedBytes= (totalBytes - fs_info.usedBytes);
+  tft.setTextColor(TFT_GREEN);
+    tft.print(usedBytes/1024);
+      tft.print("KB / ");
+    tft.print(totalBytes/1024);
+          tft.print("KB");
   // Display LittleFS information
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 130);
-  tft.print("Files: ");
-  
+  tft.setCursor(10, 180);
+  tft.print("Number of Files: ");
+    tft.setTextColor(TFT_GREEN);
+    
   // Count files in root directory
   File root = LittleFS.open("/", "r");
   int fileCount = 0;
@@ -868,15 +1026,16 @@ void displayInfoScreen() {
 
   // I2C Device Detection
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 190);
+  tft.setCursor(10, 250);
   tft.print("I2C0 Devices:");
-  tft.setCursor(10, 260);
+  tft.setCursor(10, 290);
   tft.print("I2C1 Devices:");
   
   // Scan both I2C buses
   bool foundDevice = false;
   bool foundDevice1 = false;
-  int yPos = 210;
+  int yPos = 270;
+  int xPos = 20;
   delay(10);  // Small delay before I2C scan
   
   // Scan I2C0
@@ -891,13 +1050,13 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      yPos += 20;
-      if (yPos > 300) break;
+      xPos += 60;
+      if (xPos > 220) break;
     }
   }
   
   // Scan I2C1
-  yPos = 280;
+  yPos = 310;
   for (byte address = 1; address < 127; address++) {
     Wire1.beginTransmission(address);
     byte error = Wire1.endTransmission();
@@ -909,20 +1068,20 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      yPos += 20;
-      if (yPos > 300) break;
+      xPos += 60;
+      if (xPos > 220) break;
     }
   }
 
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 210);
+    tft.setCursor(20, 270);
     tft.print("No devices found");
   }
   
   if (!foundDevice1) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 280);
+    tft.setCursor(20, 310);
     tft.print("No devices found");
   }
 }
