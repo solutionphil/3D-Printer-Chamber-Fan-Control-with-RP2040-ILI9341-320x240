@@ -235,7 +235,7 @@ void setNeoPixelColor(int screenNumber) {
     case 2: // Brightness Screen
       pixels.setPixelColor(0, pixels.Color(255, 255, 0)); // Yellow
       break;
-    case 3: // Screen 3
+    case 3: // Temperature Screen
       pixels.setPixelColor(0, pixels.Color(0, 255, 0)); // Green
       break;
     case 4: // File Explorer
@@ -337,6 +337,14 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
+  // Handle temperature screen updates
+  if (currentScreen == 3) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL) {
+      updateTempDisplay();
+    }
+  }
+
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
     for (uint8_t b = 0; b < 3; b++) {  // Adjusted loop to 3 buttons
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
@@ -350,7 +358,7 @@ void loop(void) {
           lastButtonPress = currentTime + 250; // Add extra delay for button presses
           switch(b) {
             case 0: currentScreen = 7; break;  // Fans (moved from Settings)
-            case 1: currentScreen = 3; break;  // Screen 3
+            case 1: currentScreen = 3; break;  // Temperature
             case 2: currentScreen = 5; break;  // Settings
           }
           displayScreen(currentScreen);  // Display the selected screen
@@ -531,7 +539,7 @@ void drawMainMenu() {
 
   // Initialize buttons with menuSprite instead of tft
   mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
-  mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
+  mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Temperature", 1);
   mainMenuButtons[2].initButton(&menuSprite, 120, 300, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
   for (uint8_t i = 0; i < 3; i++) {  // Adjusted loop to 3 buttons
@@ -607,46 +615,43 @@ void displayTemp() {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   
-  // Initialize BME280 if not already done
+  // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
     return;
   }
 
-  /*// Clear previous values and draw labels once
-  static bool labelsDrawn = false;
-  if (!labelsDrawn) { */
-    tft.setCursor(10, 70);
-    tft.print("Temperature:");
-    tft.setCursor(10, 120);
-    tft.print("Pressure:");
-    tft.setCursor(10, 170);
-    tft.print("Altitude:");
-    tft.setCursor(10, 220);
-    tft.print("Humidity:");
-   /* labelsDrawn = true;
-  }
-  */
+  // Draw static labels
+  tft.setCursor(10, 70);
+  tft.print("Temperature:");
+  tft.setCursor(10, 120);
+  tft.print("Pressure:");
+  tft.setCursor(10, 170);
+  tft.print("Altitude:");
+  tft.setCursor(10, 220);
+  tft.print("Humidity:");
 
-  // Update sensor values every 2 seconds
+  updateTempDisplay();  // Initial display of values
+}
+
+void updateTempDisplay() {
   unsigned long currentMillis = millis();
-  if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL) {
-    lastSensorUpdate = currentMillis;
-    
-    // Clear previous values
-    tft.fillRect(130, 55, 100, 200, TFT_BLACK);
-    tft.setTextColor(TFT_GREEN);
-    // Update with new values
-    tft.setCursor(130, 70);
-    tft.printf("%.1f C", bme.readTemperature());
-    tft.setCursor(130, 120);
-    tft.printf("%.1f hPa", bme.readPressure() / 100.0F);
-    tft.setCursor(130, 170);
-    tft.printf("%.1f m", bme.readAltitude(1013.25));
-    tft.setCursor(130, 220);
-    tft.printf("%.1f %%", bme.readHumidity());
-  }
+  lastSensorUpdate = currentMillis;
+  
+  // Clear only the value areas
+  tft.fillRect(130, 55, 100, 200, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  
+  // Update with new values in fixed positions
+  tft.setCursor(130, 70);
+  tft.printf("%.1f C", bme.readTemperature());
+  tft.setCursor(130, 120);
+  tft.printf("%.1f hPa", bme.readPressure() / 100.0F);
+  tft.setCursor(130, 170);
+  tft.printf("%.1f m", bme.readAltitude(1013.25));
+  tft.setCursor(130, 220);
+  tft.printf("%.1f %%", bme.readHumidity());
 }
 
 void displayFileExplorer() {
