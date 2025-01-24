@@ -259,7 +259,10 @@ void setup() {
   Wire.begin();
   
   // Initialize I2C1 with proper constructor
-  TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
+  //TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
+  //Wire1.begin();
+  Wire1.setSDA(I2C1_SDA);
+  Wire1.setSCL(I2C1_SCL);
   Wire1.begin();
 
   // Initialize menu sprite
@@ -466,6 +469,7 @@ void displayLoadingScreen() {
 
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
+   // tft.fillRectVGradient(0, 0, 240, 320, TFT_CYAN, TFT_BROWN);
   
   if (screen != 0) {  // Only show back button when not on main menu
     tft.setFreeFont(LABEL2_FONT);
@@ -479,22 +483,22 @@ void displayScreen(int screen) {  // Update screen display logic
 
   switch (screen) {
     case 0:
-      drawMainMenu();
+      drawMainMenu(); // Display Main Menu
       break;
     case 1:
       displayScreen1();  // Display screen 1
       break;
     case 2:
-      displayScreen2();
+      displayBGBrightness(); // Display Backlight Control screen
       break;
     case 3:
       displayScreen3();
       break;
     case 4:
-      displayScreen4();  // Display file explorer
+      displayFileExplorer();  // Display file explorer
       break;
     case 5:
-      displayScreen5();  // Display Settings
+      displaySettings();  // Display settings
       break;
     case 6:
       displayLEDControl();  // Display LED Control screen
@@ -510,17 +514,18 @@ void displayScreen(int screen) {  // Update screen display logic
 
 void drawMainMenu() {
   // Draw to sprite instead of directly to screen
-  menuSprite.fillSprite(TFT_BLACK);
+  menuSprite.fillSprite(TFT_DARKCYAN);
   menuSprite.setTextColor(TFT_WHITE);
-  menuSprite.setFreeFont(LABEL2_FONT);
+  menuSprite.setFreeFont(&Yellowtail_32);
   menuSprite.setTextSize(1);
-  menuSprite.setCursor(10, 50);
+  menuSprite.setCursor(50, 50);
   menuSprite.print("Main Menu");
+    menuSprite.setFreeFont(LABEL2_FONT);
 
   // Initialize buttons with menuSprite instead of tft
   mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
   mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Screen 3", 1);
-  mainMenuButtons[2].initButton(&menuSprite, 120, 240, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
+  mainMenuButtons[2].initButton(&menuSprite, 120, 300, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
   for (uint8_t i = 0; i < 3; i++) {  // Adjusted loop to 3 buttons
     mainMenuButtons[i].drawButton();
@@ -538,7 +543,7 @@ void displayScreen1() {
   tft.print("Screen 1");
 }
 
-void displayScreen2() {
+void displayBGBrightness() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
   
@@ -599,7 +604,7 @@ void displayScreen3() {
   tft.print("Screen 3");
 }
 
-void displayScreen4() {
+void displayFileExplorer() {
   tft.fillScreen(TFT_BLACK);
 
   // Additional delay specifically for file explorer to prevent immediate touch processing
@@ -627,7 +632,7 @@ void displayScreen4() {
   }
 }
 
-void displayScreen5() {
+void displaySettings() {
   menuSprite.fillSprite(TFT_BLACK);
   menuSprite.setTextColor(TFT_WHITE);
   menuSprite.setFreeFont(LABEL2_FONT);
@@ -848,7 +853,7 @@ void handleFileButtonPress(uint8_t index) {
   if (displayDeletionPrompt(fileName)) {
     if (LittleFS.exists(fileName)) {
       LittleFS.remove(fileName);
-      displayScreen4();  // Immediately refresh screen after deletion
+      displayFileExplorer();  // Immediately refresh screen after deletion
       return;
     }
   } else {
@@ -890,7 +895,7 @@ void displayFileContents(String fileName) {
     backButton.press(pressed && backButton.contains(t_x, t_y));
 
     if (backButton.justReleased()) {
-      displayScreen4();
+      displayFileExplorer();
       return;
     }
   }
@@ -954,14 +959,14 @@ void displayInfoScreen() {
   screenButton.drawButton();
 
   // Rest of header
-    tft.setFreeFont(LABEL2_FONT);
+  tft.setFreeFont(LABEL2_FONT);
   tft.setCursor(10, 20);
   tft.print("System Info");
   tft.setFreeFont(LABEL2_FONT);
 
    // Display CPU frequency
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 50);
+  tft.setCursor(10, 70);
   tft.print("CPU: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(F_CPU / 1000000);
@@ -969,7 +974,7 @@ void displayInfoScreen() {
 
   // Display RP2040 temperature
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 70);
+  tft.setCursor(10, 90);
   tft.print("Temp: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(analogReadTemp());
@@ -977,7 +982,7 @@ void displayInfoScreen() {
 
   // Display free heap memory
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 90);
+  tft.setCursor(10,110);
   tft.print("Free RAM: ");
   tft.setTextColor(TFT_GREEN);
   tft.print(rp2040.getFreeHeap()/1024);
@@ -985,10 +990,10 @@ void displayInfoScreen() {
   
     // Display LittleFS information
   tft.setTextColor(TFT_YELLOW);
-  tft.setCursor(10, 120);
+  tft.setCursor(10, 140);
   tft.print("LittleFS: ");
     tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 140);
+  tft.setCursor(10, 160);
   tft.print("Storage: ");
 
     if(!LittleFS.begin()) {
@@ -1006,7 +1011,7 @@ void displayInfoScreen() {
           tft.print("KB");
   // Display LittleFS information
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 160);
+  tft.setCursor(10, 180);
   tft.print("Number of Files: ");
     tft.setTextColor(TFT_GREEN);
     
@@ -1021,15 +1026,16 @@ void displayInfoScreen() {
 
   // I2C Device Detection
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 190);
+  tft.setCursor(10, 250);
   tft.print("I2C0 Devices:");
-  tft.setCursor(10, 260);
+  tft.setCursor(10, 290);
   tft.print("I2C1 Devices:");
   
   // Scan both I2C buses
   bool foundDevice = false;
   bool foundDevice1 = false;
-  int yPos = 210;
+  int yPos = 270;
+  int xPos = 20;
   delay(10);  // Small delay before I2C scan
   
   // Scan I2C0
@@ -1044,13 +1050,13 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      yPos += 20;
-      if (yPos > 300) break;
+      xPos += 60;
+      if (xPos > 220) break;
     }
   }
   
   // Scan I2C1
-  yPos = 280;
+  yPos = 310;
   for (byte address = 1; address < 127; address++) {
     Wire1.beginTransmission(address);
     byte error = Wire1.endTransmission();
@@ -1062,20 +1068,20 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      yPos += 20;
-      if (yPos > 300) break;
+      xPos += 60;
+      if (xPos > 220) break;
     }
   }
 
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 210);
+    tft.setCursor(20, 270);
     tft.print("No devices found");
   }
   
   if (!foundDevice1) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 280);
+    tft.setCursor(20, 310);
     tft.print("No devices found");
   }
 }
