@@ -2,7 +2,7 @@
  * Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
- * Date: 01/21/2025
+ * Date: 01/24/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
@@ -21,7 +21,8 @@
  * - Adafruit_NeoPixel: For NeoPixel control
  * - Wire: For I2C communication
  */
-
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 #include <LittleFS.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
@@ -29,6 +30,13 @@
 #include "RP2040_PWM.h"   // PWM library
 #include <Adafruit_NeoPixel.h>
 #include <Wire.h>
+
+
+// BME280
+#define SEALEVELPRESSURE_HPA (1013.25)
+Adafruit_BME280 bme; // I2C
+unsigned long delayTime;
+
 
 // PWM frequencies
 float frequency = 1831;      // For brightness control
@@ -257,14 +265,27 @@ void setup() {
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
   Wire.begin();
-  
-  // Initialize I2C1 with proper constructor
-  //TwoWire Wire1(i2c1, I2C1_SDA, I2C1_SCL);
-  //Wire1.begin();
+ 
+  // Initialize I2C1 
   Wire1.setSDA(I2C1_SDA);
   Wire1.setSCL(I2C1_SCL);
   Wire1.begin();
 
+ /* // Initialize BME280
+    unsigned BMEstatus;
+    BMEstatus = bme.begin();  
+    // You can also pass in a Wire library object like &Wire2
+    // status = bme.begin(0x76, &Wire2)
+    if (!BMEstatus) {
+        Serial.println("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
+        Serial.print("SensorID was: 0x"); Serial.println(bme.sensorID(),16);
+        Serial.print("        ID of 0xFF probably means a bad address, a BMP 180 or BMP 085\n");
+        Serial.print("   ID of 0x56-0x58 represents a BMP 280,\n");
+        Serial.print("        ID of 0x60 represents a BME 280.\n");
+        Serial.print("        ID of 0x61 represents a BME 680.\n");
+        while (1) delay(10);
+    }
+*/
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
 
@@ -597,12 +618,49 @@ void displayBGBrightness() {
 }
 
 void displayScreen3() {
+  bme.begin(0x76, &Wire); 
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   tft.setCursor(10, 70);
-  tft.print("Screen 3");
+  tft.print("Temperature Test");
+
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 120);
+  tft.print("Temperature= ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(bme.readTemperature());
+  tft.print(" °C");
+
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(10, 160);
+  tft.print("Pressure = ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(bme.readPressure() / 100.0F);
+  tft.print(" hPA");
+
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(10, 200);
+  tft.print("Approx. Altitude = ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+  tft.print(" m");
+
+
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(10, 240);
+  tft.print("Humidity = ");
+  tft.setTextColor(TFT_GREEN);
+  tft.print(bme.readHumidity());
+  tft.print(" %");
+
+
 }
+
 
 void displayFileExplorer() {
   tft.fillScreen(TFT_BLACK);
@@ -1084,4 +1142,25 @@ void displayInfoScreen() {
     tft.setCursor(20, 310);
     tft.print("No devices found");
   }
+}
+
+void printValues() {
+    Serial.print("Temperature = ");
+    Serial.print(bme.readTemperature());
+    Serial.println(" °C");
+
+    Serial.print("Pressure = ");
+
+    Serial.print(bme.readPressure() / 100.0F);
+    Serial.println(" hPa");
+
+    Serial.print("Approx. Altitude = ");
+    Serial.print(bme.readAltitude(SEALEVELPRESSURE_HPA));
+    Serial.println(" m");
+
+    Serial.print("Humidity = ");
+    Serial.print(bme.readHumidity());
+    Serial.println(" %");
+
+    Serial.println();
 }
