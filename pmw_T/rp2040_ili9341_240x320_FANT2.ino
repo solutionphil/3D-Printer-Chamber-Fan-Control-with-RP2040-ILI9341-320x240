@@ -967,10 +967,15 @@ void displayFanControl(uint8_t fanIndex) {
           tft.fillRect(150, 60 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage text area
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
-          saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
           
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
+            // Update all fan speeds in memory
+            for (int j = 0; j < 3; j++) {
+              currentFanSpeeds[j] = fanSpeed;
+            }
+            // Save all fan speeds after updating
+            saveFanSpeeds(currentFanSpeeds);
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
@@ -993,6 +998,9 @@ void displayFanControl(uint8_t fanIndex) {
             tft.setTextColor(TFT_GREEN);
             tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
             tft.setTextColor(TFT_WHITE);
+            
+            // Save individual fan speed changes
+            saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
