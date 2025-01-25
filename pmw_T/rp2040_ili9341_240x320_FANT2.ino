@@ -468,37 +468,47 @@ void loop(void) {
   }
 }
 
-void drawModernGauge(int x, int y, int r, float min_val, float max_val, float value, String label, uint16_t color, uint16_t bgColor) {
-  // Hintergrund
-  tft.fillCircle(x, y, r, TFT_DARKGREY);
+// Function to draw gauge on sprite
+void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
+  sprite->fillSprite(TFT_BLACK);
   
-  // Fülle den Gauge basierend auf dem Wert
-  float angle = map(value, min_val, max_val, -225, 45) * 3.14159 / 180;
-  for (int i = -225; i <= angle * 180 / 3.14159; i++) {
-    float rad = i * 3.14159 / 180;
-    int x1 = x + cos(rad) * (r - 2);
-    int y1 = y + sin(rad) * (r - 2);
-    int x2 = x + cos(rad) * (r - 10);
-    int y2 = y + sin(rad) * (r - 10);
-    tft.drawLine(x1, y1, x2, y2, color);
+  // Draw background circle
+  sprite->fillCircle(x, y, 50, TFT_DARKGREY);
+  
+  // Calculate angle based on value
+  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
+  
+  // Draw gauge arc
+  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
+    float rad = i * PI / 180.0;
+    int x1 = x + cos(rad) * 48;
+    int y1 = y + sin(rad) * 48;
+    int x2 = x + cos(rad) * 40;
+    int y2 = y + sin(rad) * 40;
+    sprite->drawLine(x1, y1, x2, y2, color);
   }
   
-  // Innerer Kreis
-  tft.fillCircle(x, y, r - 12, bgColor);
+  // Draw inner circle
+  sprite->fillCircle(x, y, 38, bgColor);
   
-  // Wert anzeigen
-  tft.setTextColor(TFT_WHITE, bgColor);
-  tft.setTextSize(1);
-  tft.drawCentreString(String(value, 1), x, y - 10, 4);
+  // Display value
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->setTextSize(1);
+  char buf[10];
+  sprintf(buf, "%.1f", value);
+  sprite->drawCentreString(buf, x, y - 10, 4);
   
-  // Einheit anzeigen
-  tft.setTextSize(1);
-  tft.drawCentreString(label, x, y + 15, 2);
+  // Display label
+  sprite->setTextSize(1);
+  sprite->drawCentreString(label, x, y + 15, 2);
   
-  // Min und Max Werte
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft.drawString(String(min_val, 0), x - r + 5, y + r - 20, 1);
-  tft.drawString(String(max_val, 0), x + r - 20, y + r - 20, 1);
+  // Draw min/max values
+  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  char minBuf[10], maxBuf[10];
+  sprintf(minBuf, "%.0f", min_val);
+  sprintf(maxBuf, "%.0f", max_val);
+  sprite->drawString(minBuf, x - 45, y + 35, 1);
+  sprite->drawString(maxBuf, x + 35, y + 35, 1);
 }
 
 void displayLoadingScreen() {
@@ -659,42 +669,37 @@ void displayTemp() {
     tft.print("BME280 not found!");
     return;
   }
+
+  // Initialize sprites if not already created
+  if (!gauge1.created()) {
+    gauge1.createSprite(120, 120);
+  }
+  if (!gauge2.created()) {
+    gauge2.createSprite(120, 120);
+  }
+  if (!gaugebg.created()) {
+    gaugebg.createSprite(240, 320);
+    gaugebg.fillSprite(TFT_BLACK);
+    gaugebg.pushSprite(0, 0);
+  }
+
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   
-  drawModernGauge(120, 80, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
-  drawModernGauge(120, 220, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  // Draw to sprites instead of directly to screen
+  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 60, 160, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  
+  // Push sprites to screen
+  gauge1.pushSprite(60, 20);
+  gauge2.pushSprite(60, 160);
 
-  /*
-  // Draw temperature display
-  tft.drawRect(10, 50, 220, 100, TFT_WHITE);
-  tft.drawString("Temperature", 20, 60);
-  float temp = bme.readTemperature();
-  tft.setTextColor(TFT_GREEN);
-  tft.setTextSize(2);
-  tft.drawString(String(temp, 1) + " C", 20, 90);
-  tft.setTextSize(1);
-  
-  // Draw humidity display
-  tft.drawRect(10, 160, 220, 100, TFT_WHITE);
-  tft.drawString("Humidity", 20, 170);
-  float humidity = bme.readHumidity();
-  tft.setTextColor(TFT_CYAN);
-  tft.setTextSize(2);
-  tft.drawString(String(humidity, 1) + " %", 20, 200);
-  tft.setTextSize(1);
-  
-  // Draw pressure and altitude
-  tft.setTextColor(TFT_YELLOW);
-  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
-  tft.drawString("Altitude: " + String(bme.readAltitude(1003.25), 1) + " m", 20, 290);
-  */
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 }
 
- void updateTempDisplay() {
+void updateTempDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
   
@@ -702,11 +707,11 @@ void displayTemp() {
   float hum = bme.readHumidity();
   
   // Update temperature display
-tft.fillRoundRect(120, 80, 60, 60, 15, TFT_BLACK);
-tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
+ // tft.fillRoundRect(120, 80, 60, 60, 15, TFT_BLACK);
+ // tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
 
-  drawModernGauge(120, 80, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
-  drawModernGauge(120, 220, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge1, 120, 80, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 120, 220, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
 }
 
 void displayFileExplorer() {
