@@ -708,7 +708,7 @@ void updateTempDisplay() {
   
   // Update temperature display
  // tft.fillRoundRect(120, 80, 60, 60, 15, TFT_BLACK);
- // tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
+  tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
 
   drawGaugeToSprite(&gauge1, 120, 80, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 120, 220, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
