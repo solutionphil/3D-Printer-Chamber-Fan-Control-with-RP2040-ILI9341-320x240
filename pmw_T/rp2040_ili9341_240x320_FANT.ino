@@ -32,6 +32,18 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
+
+
+// Initialize TFT
+TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
+// Create single shared sprite for all UI elements
+TFT_eSprite uiSprite = TFT_eSprite(&tft);
+TFT_eSprite knob = TFT_eSprite(&tft);
+TFT_eSprite gauge1 = TFT_eSprite(&tft);
+TFT_eSprite gauge2 = TFT_eSprite(&tft);
+TFT_eSprite gaugebg = TFT_eSprite(&tft);
+TFT_eSprite menuSprite = TFT_eSprite(&tft);
+
 // PWM frequencies
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
@@ -56,15 +68,9 @@ char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
 
-// Initialize TFT and slider objects (updated for Fans in Main Menu)
-TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
-TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
 SliderWidget slider3 = SliderWidget(&tft, &knob);
-
-// Create sprite for main menu
-TFT_eSprite menuSprite = TFT_eSprite(&tft);
 
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1" // Calibration data file
@@ -136,6 +142,40 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
+
+
+
+// Function to cleanup sprites and free memory
+void cleanupSprites() {
+    // Only clean up sprites that aren't needed for the next screen
+    if (currentScreen != 0 && uiSprite.created()) {
+        uiSprite.deleteSprite();
+        Serial.println("Cleaned uiSprite");
+    }
+    if (currentScreen != 2 && knob.created()) {
+        knob.deleteSprite();
+        Serial.println("Cleaned knob");
+    }
+    if (gauge1.created()) {
+        gauge1.deleteSprite();
+        Serial.println("Cleaned gauge1");
+    }
+    if (gauge2.created()) {
+        gauge2.deleteSprite();
+        Serial.println("Cleaned gauge2");
+    }
+    if (gaugebg.created()) {
+        gaugebg.deleteSprite();
+        Serial.println("Cleaned gaugebg");
+    }
+    if (menuSprite.created()) {
+        menuSprite.deleteSprite();
+        Serial.println("Cleaned menuSprite");
+    }
+    
+    // Log available memory after cleanup
+    Serial.printf("Free RAM after cleanup: %d bytes\n", rp2040.getFreeHeap());
+}
 
 void saveBrightness(float value) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
@@ -258,6 +298,7 @@ void setNeoPixelColor(int screenNumber) {
 }
 
 void setup() {
+
   // Initialize serial communication for debugging
   Serial.begin(9600);  
   // Initialize I2C0
@@ -431,15 +472,17 @@ void loop(void) {
     if (screenButton.justReleased()) screenButton.drawButton();
 
     // Switch to the next screen when the button is pressed
-    if (screenButton.justPressed()) {
-      unsigned long currentTime = millis();
-      if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
-        lastButtonPress = currentTime;
-        // Return to main menu for screens 2, 4, and 7
-        if (currentScreen == 2 || currentScreen == 4 || currentScreen == 7 || currentScreen == 8) {
-          currentScreen = 0;
-        } else currentScreen = 0;
-        displayScreen(currentScreen);
+      if (screenButton.justPressed()) {
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = currentTime;
+          // Return to settings menu for specific screens
+          if (currentScreen == 2 || currentScreen == 4 || currentScreen == 6 || currentScreen == 8) {
+            currentScreen = 5;  // Return to Settings
+          } else {
+            currentScreen = 0;  // Return to Main Menu for other screens
+          }
+          displayScreen(currentScreen);
       }
     }
   }
@@ -464,6 +507,72 @@ void loop(void) {
   }
 }
 
+// Function to draw gauge on sprite
+void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
+  sprite->fillSprite(TFT_BLACK);
+  
+  // Draw outer circle and background arc
+  sprite->fillCircle(x, y, 50, TFT_DARKGREY);
+  
+  // Draw background arc with smaller step size for smoothness
+  for (int i = -225; i <= 45; i++) {
+    float rad = i * PI / 180.0;
+    int x1 = x + cos(rad) * 48;
+    int y1 = y + sin(rad) * 48;
+    int x2 = x + cos(rad) * 40;
+    int y2 = y + sin(rad) * 40;
+    sprite->drawLine(x1, y1, x2, y2, TFT_DARKGREY);
+  }
+  
+  // Calculate angle based on value with smoother mapping
+  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
+  
+  // Draw gauge arc with anti-aliasing effect
+  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
+    float rad = i * PI / 180.0;
+    // Draw multiple lines with slightly different thicknesses for anti-aliasing
+    for (int j = 0; j < 3; j++) {
+      int x1 = x + cos(rad) * (48 - j);
+      int y1 = y + sin(rad) * (48 - j);
+      int x2 = x + cos(rad) * (40 + j);
+      int y2 = y + sin(rad) * (40 + j);
+      sprite->drawLine(x1, y1, x2, y2, color);
+    }
+  }
+  
+  // Draw tick marks
+  for (int i = -225; i <= 45; i += 27) {  // 27 degrees = 10 tick marks
+    float rad = i * PI / 180.0;
+    int x1 = x + cos(rad) * 48;
+    int y1 = y + sin(rad) * 48;
+    int x2 = x + cos(rad) * 44;
+    int y2 = y + sin(rad) * 44;
+    sprite->drawLine(x1, y1, x2, y2, TFT_WHITE);
+  }
+  
+  // Draw inner circle
+  sprite->fillCircle(x, y, 38, bgColor);
+  
+  // Display value
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->setTextSize(1);
+  char buf[10];
+  sprintf(buf, "%.1f", value);
+  sprite->drawCentreString(buf, x, y - 10, 4);
+  
+  // Display label
+  sprite->setTextSize(1);
+  sprite->drawCentreString(label, x, y + 15, 2);
+  
+  // Draw min/max values
+  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  char minBuf[10], maxBuf[10];
+  sprintf(minBuf, "%.0f", min_val);
+  sprintf(maxBuf, "%.0f", max_val);
+  sprite->drawString(minBuf, x - 45, y + 35, 1);
+  sprite->drawString(maxBuf, x + 35, y + 35, 1);
+}
+
 void displayLoadingScreen() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
@@ -483,6 +592,17 @@ void displayLoadingScreen() {
 }
 
 void displayScreen(int screen) {  // Update screen display logic
+  // Clean up sprites before switching screens, but preserve main menu sprite
+  if (screen != 0) {
+    cleanupSprites();
+  }
+  
+  // Always ensure menuSprite exists
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+    Serial.println("Created menuSprite");
+  }
+  
   tft.fillScreen(TFT_BLACK);  // Clear the screen
   
   if (screen != 0) {  // Only show back button when not on main menu
@@ -527,6 +647,11 @@ void displayScreen(int screen) {  // Update screen display logic
 }
 
 void drawMainMenu() {
+  // Create menuSprite if it doesn't exist
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+  }
+  
   // Draw to sprite instead of directly to screen
   menuSprite.fillSprite(TFT_DARKCYAN);
   menuSprite.setTextColor(TFT_WHITE);
@@ -611,9 +736,14 @@ void displayBGBrightness() {
 }
 
 void displayTemp() {
+  tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
+
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
 
   // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
@@ -621,30 +751,35 @@ void displayTemp() {
     tft.print("BME280 not found!");
     return;
   }
-  
-  // Draw temperature display
-  tft.drawRect(10, 50, 220, 100, TFT_WHITE);
-  tft.drawString("Temperature", 20, 60);
+
+  // Create sprites with proper dimensions if not already created
+  if (!gauge1.created()) gauge1.createSprite(120, 160);
+  if (!gauge2.created()) gauge2.createSprite(120, 160);
+
+  // Initialize sprites if not already created
+  if (!gauge1.created()) {
+    gauge1.createSprite(120, 120);
+  }
+  if (!gauge2.created()) {
+    gauge2.createSprite(120, 120);
+  }
+  if (!gaugebg.created()) {
+    gaugebg.createSprite(240, 320);
+    gaugebg.fillSprite(TFT_BLACK);
+    gaugebg.pushSprite(0, 0);
+  }
+
   float temp = bme.readTemperature();
-  tft.setTextColor(TFT_GREEN);
-  tft.setTextSize(2);
-  tft.drawString(String(temp, 1) + " C", 20, 90);
-  tft.setTextSize(1);
+  float hum = bme.readHumidity();
   
-  // Draw humidity display
-  tft.drawRect(10, 160, 220, 100, TFT_WHITE);
-  tft.drawString("Humidity", 20, 170);
-  float humidity = bme.readHumidity();
-  tft.setTextColor(TFT_CYAN);
-  tft.setTextSize(2);
-  tft.drawString(String(humidity, 1) + " %", 20, 200);
-  tft.setTextSize(1);
+  // Draw to sprites instead of directly to screen
+  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
   
-  // Draw pressure and altitude
-  tft.setTextColor(TFT_YELLOW);
-  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
-  tft.drawString("Altitude: " + String(bme.readAltitude(1013.25), 1) + " m", 20, 290);
-  
+  // Push sprites to screen at centered positions
+  gauge1.pushSprite(60, 40);  // Adjusted Y position for temperature gauge
+  gauge2.pushSprite(60, 180); // Adjusted Y position for humidity gauge
+
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
@@ -655,34 +790,25 @@ void updateTempDisplay() {
   lastSensorUpdate = currentMillis;
   
   float temp = bme.readTemperature();
-  float humidity = bme.readHumidity();
+  float hum = bme.readHumidity();
   
-  // Update temperature display
-  tft.fillRect(20, 90, 200, 30, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
-  tft.setTextSize(2);
-  tft.drawString(String(temp, 1) + " C", 20, 90);
-  tft.setTextSize(1);
+
+  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
-  // Update humidity display
-  tft.fillRect(20, 200, 200, 30, TFT_BLACK);
-  tft.setTextColor(TFT_CYAN);
-  tft.setTextSize(2);
-  tft.drawString(String(humidity, 1) + " %", 20, 200);
-  tft.setTextSize(1);
-  
-  // Update pressure and altitude
-  tft.fillRect(20, 270, 200, 40, TFT_BLACK);
-  tft.setTextColor(TFT_YELLOW);
-  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
-  tft.drawString("Altitude: " + String(bme.readAltitude(1013.25), 1) + " m", 20, 290);
+  // Push updated sprites to screen at the same positions as initial display
+  gauge1.pushSprite(60, 40);
+  gauge2.pushSprite(60, 180);
 }
 
 void displayFileExplorer() {
+  // Don't clean up sprites here, let displayScreen handle it
   tft.fillScreen(TFT_BLACK);
 
-  // Additional delay specifically for file explorer to prevent immediate touch processing
-  delay(100);
+  // Create necessary sprites for file explorer
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+  }
   
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
@@ -841,10 +967,15 @@ void displayFanControl(uint8_t fanIndex) {
           tft.fillRect(150, 60 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage text area
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
-          saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
           
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
+            // Update all fan speeds in memory
+            for (int j = 0; j < 3; j++) {
+              currentFanSpeeds[j] = fanSpeed;
+            }
+            // Save all fan speeds after updating
+            saveFanSpeeds(currentFanSpeeds);
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
@@ -867,6 +998,9 @@ void displayFanControl(uint8_t fanIndex) {
             tft.setTextColor(TFT_GREEN);
             tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
             tft.setTextColor(TFT_WHITE);
+            
+            // Save individual fan speed changes
+            saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
