@@ -68,15 +68,6 @@ char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
 
-
-// Function to cleanup sprites
-void cleanupSprites() {
-  if (knob.created()) knob.deleteSprite();
-  if (gauge1.created()) gauge1.deleteSprite();
-  if (gauge2.created()) gauge2.deleteSprite();
-  if (gaugebg.created()) gaugebg.deleteSprite();
-  if (menuSprite.created()) menuSprite.deleteSprite();
-}
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
 SliderWidget slider3 = SliderWidget(&tft, &knob);
@@ -151,6 +142,40 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
+
+
+
+// Function to cleanup sprites and free memory
+void cleanupSprites() {
+    // Only clean up sprites that aren't needed for the next screen
+    if (currentScreen != 0 && uiSprite.created()) {
+        uiSprite.deleteSprite();
+        Serial.println("Cleaned uiSprite");
+    }
+    if (currentScreen != 2 && knob.created()) {
+        knob.deleteSprite();
+        Serial.println("Cleaned knob");
+    }
+    if (gauge1.created()) {
+        gauge1.deleteSprite();
+        Serial.println("Cleaned gauge1");
+    }
+    if (gauge2.created()) {
+        gauge2.deleteSprite();
+        Serial.println("Cleaned gauge2");
+    }
+    if (gaugebg.created()) {
+        gaugebg.deleteSprite();
+        Serial.println("Cleaned gaugebg");
+    }
+    if (menuSprite.created()) {
+        menuSprite.deleteSprite();
+        Serial.println("Cleaned menuSprite");
+    }
+    
+    // Log available memory after cleanup
+    Serial.printf("Free RAM after cleanup: %d bytes\n", rp2040.getFreeHeap());
+}
 
 void saveBrightness(float value) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
@@ -447,15 +472,17 @@ void loop(void) {
     if (screenButton.justReleased()) screenButton.drawButton();
 
     // Switch to the next screen when the button is pressed
-    if (screenButton.justPressed()) {
-      unsigned long currentTime = millis();
-      if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
-        lastButtonPress = currentTime;
-        // Return to main menu for screens 2, 4, and 7
-        if (currentScreen == 2 || currentScreen == 4 || currentScreen == 7 || currentScreen == 8) {
-          currentScreen = 0;
-        } else currentScreen = 0;
-        displayScreen(currentScreen);
+      if (screenButton.justPressed()) {
+        unsigned long currentTime = millis();
+        if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = currentTime;
+          // Return to settings menu for specific screens
+          if (currentScreen == 2 || currentScreen == 4 || currentScreen == 6 || currentScreen == 8) {
+            currentScreen = 5;  // Return to Settings
+          } else {
+            currentScreen = 0;  // Return to Main Menu for other screens
+          }
+          displayScreen(currentScreen);
       }
     }
   }
@@ -565,6 +592,17 @@ void displayLoadingScreen() {
 }
 
 void displayScreen(int screen) {  // Update screen display logic
+  // Clean up sprites before switching screens, but preserve main menu sprite
+  if (screen != 0) {
+    cleanupSprites();
+  }
+  
+  // Always ensure menuSprite exists
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+    Serial.println("Created menuSprite");
+  }
+  
   tft.fillScreen(TFT_BLACK);  // Clear the screen
   
   if (screen != 0) {  // Only show back button when not on main menu
@@ -609,6 +647,11 @@ void displayScreen(int screen) {  // Update screen display logic
 }
 
 void drawMainMenu() {
+  // Create menuSprite if it doesn't exist
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+  }
+  
   // Draw to sprite instead of directly to screen
   menuSprite.fillSprite(TFT_DARKCYAN);
   menuSprite.setTextColor(TFT_WHITE);
@@ -759,10 +802,13 @@ void updateTempDisplay() {
 }
 
 void displayFileExplorer() {
+  // Don't clean up sprites here, let displayScreen handle it
   tft.fillScreen(TFT_BLACK);
 
-  // Additional delay specifically for file explorer to prevent immediate touch processing
-  delay(100);
+  // Create necessary sprites for file explorer
+  if (!menuSprite.created()) {
+    menuSprite.createSprite(240, 320);
+  }
   
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
