@@ -32,7 +32,31 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-
+// Function prototypes
+void touch_calibrate();
+void displayScreen(int screen);
+void updateTempDisplay();
+void displayLoadingScreen();
+void displayLEDControl();
+void displayFanControl(uint8_t fanIndex);
+void handleFileButtonPress(uint8_t index);
+void drawMainMenu();
+void displayScreen1();
+void displayBGBrightness();
+void displayTemp();
+void displayFileExplorer();
+void displaySettings();
+void displayFileContents(String fileName);
+void displayInfoScreen();
+bool displayDeletionPrompt(String fileName);
+void cleanupSprites();
+void saveBrightness(float value);
+float loadBrightness();
+void saveLEDState(bool state);
+bool loadLEDState();
+void saveFanSpeeds(float speeds[3]);
+void loadFanSpeeds(float speeds[3]);
+void setNeoPixelColor(int screenNumber);
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -142,8 +166,6 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
-
-
 
 // Function to cleanup sprites and free memory
 void cleanupSprites() {
@@ -361,7 +383,7 @@ void setup() {
   loadFanSpeeds(fanSpeeds);
   for (int i = 0; i < 3; i++) {
     currentFanSpeeds[i] = fanSpeeds[i];
-    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
+    Fan_PWM[i]->setPW M(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
   }
 
   // Initialize the TFT display and set its rotation (Main Menu updated)
@@ -507,21 +529,42 @@ void loop(void) {
   }
 }
 
-// Function to draw gauge on sprite
+  // Function to draw gauge on sprite with simplified gradients
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
   
-  // Draw outer circle and background arc
-  sprite->fillCircle(x, y, 50, TFT_DARKGREY);
+  // Create semi-circular background with banded gradient (4 steps)
+  const uint8_t gradientSteps = 4;
+  for (int step = 0; step < gradientSteps; step++) {
+    int rStart = 50 - (step * 5/gradientSteps);
+    int rEnd = 50 - ((step + 1) * 5/gradientSteps);
+    float gradientFactor = step / float(gradientSteps - 1);
+    uint8_t intensity = 32 + (gradientFactor * 32); // Range from 32 to 64
+    
+    for (int r = rStart; r > rEnd; r--) {
+      for (int i = -225; i <= 45; i++) {
+        float rad = i * PI / 180.0;
+      
+      // Create gradient from dark to light grey
+      uint8_t intensity = 32 + (gradientFactor * 32); // Range from 32 to 64
+      uint16_t gradColor = sprite->color565(intensity, intensity, intensity);
+      
+      int x1 = x + cos(rad) * r;
+      int y1 = y + sin(rad) * r;
+      sprite->drawPixel(x1, y1, gradColor);
+    }
+  }
   
-  // Draw background arc with smaller step size for smoothness
+  // Add glass effect with gradient
   for (int i = -225; i <= 45; i++) {
     float rad = i * PI / 180.0;
-    int x1 = x + cos(rad) * 48;
-    int y1 = y + sin(rad) * 48;
-    int x2 = x + cos(rad) * 40;
-    int y2 = y + sin(rad) * 40;
-    sprite->drawLine(x1, y1, x2, y2, TFT_DARKGREY);
+    for (int r = 44; r >= 40; r--) {
+      int x1 = x + cos(rad) * r;
+      int y1 = y + sin(rad) * r;
+      // Create gradient from dark to light
+      uint16_t gradColor = (r - 40) * 8 + TFT_DARKGREY;
+      sprite->drawPixel(x1, y1, gradColor);
+    }
   }
   
   // Calculate angle based on value with smoother mapping
@@ -540,18 +583,27 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
     }
   }
   
-  // Draw tick marks
-  for (int i = -225; i <= 45; i += 27) {  // 27 degrees = 10 tick marks
+  // Draw major and minor tick marks
+  for (int i = -225; i <= 45; i += 9) {  // 9 degrees = 30 tick marks
     float rad = i * PI / 180.0;
-    int x1 = x + cos(rad) * 48;
-    int y1 = y + sin(rad) * 48;
-    int x2 = x + cos(rad) * 44;
-    int y2 = y + sin(rad) * 44;
-    sprite->drawLine(x1, y1, x2, y2, TFT_WHITE);
+    bool isMajor = (i % 27 == 0);  // Every third tick is major
+    int len = isMajor ? 6 : 3;
+    int x1 = x + cos(rad) * 44;
+    int y1 = y + sin(rad) * 44;
+    int x2 = x + cos(rad) * (44 - len);
+    int y2 = y + sin(rad) * (44 - len);
+    sprite->drawLine(x1, y1, x2, y2, isMajor ? TFT_WHITE : TFT_LIGHTGREY);
   }
   
-  // Draw inner circle
-  sprite->fillCircle(x, y, 38, bgColor);
+  // Draw inner circle with gradient effect
+  for (int r = 38; r >= 30; r--) {
+    // Calculate gradient components - fade from bgColor to darker shade
+    uint8_t red = ((bgColor >> 11) & 0x1F) * (r-30) / 8;
+    uint8_t green = ((bgColor >> 5) & 0x3F) * (r-30) / 8;
+    uint8_t blue = (bgColor & 0x1F) * (r-30) / 8;
+    sprite->drawCircle(x, y, r, sprite->color565(red, green, blue));
+  }
+  sprite->fillCircle(x, y, 30, bgColor);
   
   // Display value
   sprite->setTextColor(TFT_WHITE, bgColor);
@@ -751,6 +803,8 @@ void displayTemp() {
     tft.print("BME280 not found!");
     return;
   }
+
+
 
   // Create sprites with proper dimensions if not already created
   if (!gauge1.created()) gauge1.createSprite(120, 160);
