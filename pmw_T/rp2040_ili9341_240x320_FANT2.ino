@@ -507,94 +507,78 @@ void loop(void) {
   }
 }
 
-  // Function to draw gauge on sprite
+// Function to draw gauge on sprite
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
-  
-  // Create semi-circular background with enhanced gradient effect
-  for (int r = 50; r >= 45; r--) {
-    for (int i = -225; i <= 45; i++) {
-      float rad = i * PI / 180.0;
-      float gradientFactor = (float)(r - 45) / 5.0; // Calculate gradient factor
-      
-      // Create gradient from dark to light grey
-      uint8_t intensity = 32 + (gradientFactor * 32); // Range from 32 to 64
-      uint16_t gradColor = sprite->color565(intensity, intensity, intensity);
-      
-      int x1 = x + cos(rad) * r;
-      int y1 = y + sin(rad) * r;
-      sprite->drawPixel(x1, y1, gradColor);
-    }
+
+  // Draw outer circles with gradient effect
+  for(int r = 50; r >= 48; r--) {
+    sprite->drawCircle(x, y, r, (r == 50) ? TFT_WHITE : TFT_DARKGREY);
   }
-  
-  // Add glass effect with gradient
-  for (int i = -225; i <= 45; i++) {
+
+  // Draw tick marks with different lengths for major/minor ticks
+  for (int i = -225; i <= 45; i += 9) {
     float rad = i * PI / 180.0;
-    for (int r = 44; r >= 40; r--) {
-      int x1 = x + cos(rad) * r;
-      int y1 = y + sin(rad) * r;
-      // Create gradient from dark to light
-      uint16_t gradColor = (r - 40) * 8 + TFT_DARKGREY;
-      sprite->drawPixel(x1, y1, gradColor);
-    }
+    int len = (i % 27 == 0) ? 12 : 8; // Longer marks every 3rd tick
+    sprite->drawLine(x + cos(rad) * 48, y + sin(rad) * 48,
+                    x + cos(rad) * (48-len), y + sin(rad) * (48-len),
+                    (i % 27 == 0) ? TFT_WHITE : TFT_DARKGREY);
   }
   
-  // Calculate angle based on value with smoother mapping
+  // Calculate angle and color gradient based on value
   float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
+  uint16_t gradientColor;
   
-  // Draw gauge arc with anti-aliasing effect
+  // Draw colored gauge arc with gradient effect
   for (int i = -225; i <= (angle * 180.0 / PI); i++) {
-    float rad = i * PI / 180.0;
-    // Draw multiple lines with slightly different thicknesses for anti-aliasing
-    for (int j = 0; j < 3; j++) {
-      int x1 = x + cos(rad) * (48 - j);
-      int y1 = y + sin(rad) * (48 - j);
-      int x2 = x + cos(rad) * (40 + j);
-      int y2 = y + sin(rad) * (40 + j);
-      sprite->drawLine(x1, y1, x2, y2, color);
+    float progress = (i + 225) / 270.0; // Calculate progress (0.0 to 1.0)
+    float rad = i * PI / 180.0;  // Convert degrees to radians
+    if (color == TFT_RED) {
+      // Temperature gradient: Blue -> Green -> Red
+      if (progress < 0.5) {
+        gradientColor = sprite->color565(0, progress * 510, 255 - progress * 510);
+      } else {
+        gradientColor = sprite->color565((progress - 0.5) * 510, 255 - (progress - 0.5) * 510, 0);
+      }
+    } else {
+      // Humidity gradient: Light Blue -> Dark Blue
+      gradientColor = sprite->color565(0, progress * 255, 255);
+    }
+
+    for(int w = 0; w < 3; w++) { // Thicker line for better visibility
+      sprite->drawLine(x + cos(rad) * (48-w), y + sin(rad) * (48-w),
+                      x + cos(rad) * 40, y + sin(rad) * 40,
+                      gradientColor);
     }
   }
-  
-  // Draw major and minor tick marks
-  for (int i = -225; i <= 45; i += 9) {  // 9 degrees = 30 tick marks
-    float rad = i * PI / 180.0;
-    bool isMajor = (i % 27 == 0);  // Every third tick is major
-    int len = isMajor ? 6 : 3;
-    int x1 = x + cos(rad) * 44;
-    int y1 = y + sin(rad) * 44;
-    int x2 = x + cos(rad) * (44 - len);
-    int y2 = y + sin(rad) * (44 - len);
-    sprite->drawLine(x1, y1, x2, y2, isMajor ? TFT_WHITE : TFT_LIGHTGREY);
+
+  // Draw inner circle with gradient shadow effect
+  for(int r = 35; r >= 30; r--) {
+    uint8_t shadow = map(r, 35, 30, 40, 0);
+    sprite->drawCircle(x, y, r, sprite->color565(shadow, shadow, shadow));
   }
-  
-  // Draw inner circle with gradient effect
-  for (int r = 38; r >= 30; r--) {
-    // Calculate gradient components - fade from bgColor to darker shade
-    uint8_t red = ((bgColor >> 11) & 0x1F) * (r-30) / 8;
-    uint8_t green = ((bgColor >> 5) & 0x3F) * (r-30) / 8;
-    uint8_t blue = (bgColor & 0x1F) * (r-30) / 8;
-    sprite->drawCircle(x, y, r, sprite->color565(red, green, blue));
-  }
-  sprite->fillCircle(x, y, 30, bgColor);
-  
-  // Display value
-  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->fillCircle(x, y, 29, bgColor);
+
+  // Draw min/max indicators
+  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   sprite->setTextSize(1);
+  sprite->drawString(String(int(min_val)), x - 55, y + 40, 2);
+  sprite->drawString(String(int(max_val)), x + 35, y + 40, 2);
+
+  // Display value 
   char buf[10];
   sprintf(buf, "%.1f", value);
-  sprite->drawCentreString(buf, x, y - 10, 4);
+ 
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->drawCentreString(buf, x, y-16, 4);
+
   
-  // Display label
+  // Draw label 
   sprite->setTextSize(1);
-  sprite->drawCentreString(label, x, y + 15, 2);
   
-  // Draw min/max values
-  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  char minBuf[10], maxBuf[10];
-  sprintf(minBuf, "%.0f", min_val);
-  sprintf(maxBuf, "%.0f", max_val);
-  sprite->drawString(minBuf, x - 45, y + 35, 1);
-  sprite->drawString(maxBuf, x + 35, y + 35, 1);
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->drawCentreString(label, x, y+5, 2);
+
 }
 
 void displayLoadingScreen() {
@@ -776,11 +760,6 @@ void displayTemp() {
     return;
   }
 
-  // Create title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.drawString("Environmental Monitor", 31, 31);
-  tft.setTextColor(TFT_CYAN);
-  tft.drawString("Environmental Monitor", 30, 30);
 
   // Create sprites with proper dimensions if not already created
   if (!gauge1.created()) gauge1.createSprite(120, 160);
