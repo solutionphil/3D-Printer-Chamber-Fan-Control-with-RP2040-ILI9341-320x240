@@ -32,6 +32,10 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
+// Add these global variables at the top of the file
+MeterWidget tempMeter = MeterWidget(&tft);
+MeterWidget humidMeter = MeterWidget(&tft);
+
 // PWM frequencies
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
@@ -614,23 +618,63 @@ void displayBGBrightness() {
 void displayTemp() {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
-  
+
   // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
     return;
   }
+  
+  // Configure temperature meter
+  meter_t temp_config = {
+    .rx = 80,            // x-coord of meter center
+    .ry = 100,           // y-coord of meter center
+    .r = 70,             // Radius of meter
+    .s_angle = 150,      // Start angle
+    .e_angle = 390,      // End angle
+    .range = 70,         // Full range of meter
+    .min_value = -20,    // Minimum value
+    .max_value = 50,     // Maximum value
+    .label = "°C",       // Units label
+    .text_size = 1,      // Label text size
+    .text_colour = TFT_WHITE,  // Label text color
+    .needle_colour = TFT_RED,  // Color of needle
+    .needle_length = 50, // Length of needle
+    .arc_colour = {      // Colors for different ranges
+      TFT_BLUE,         // Cold (below 10°C)
+      TFT_GREEN,        // Normal (10-30°C)
+      TFT_RED          // Hot (above 30°C)
+    },
+    .arc_angle = {0, 40, 70}  // Angles for color transitions
+  };
+  
+  // Configure humidity meter
+  meter_t humid_config = {
+    .rx = 80,
+    .ry = 240,
+    .r = 70,
+    .s_angle = 150,
+    .e_angle = 390,
+    .range = 100,
+    .min_value = 0,
+    .max_value = 100,
+    .label = "%RH",
+    .text_size = 1,
+    .text_colour = TFT_WHITE,
+    .needle_colour = TFT_CYAN,
+    .needle_length = 50,
+    .arc_colour = {
+      TFT_RED,          // Dry (0-30%)
+      TFT_GREEN,        // Comfortable (30-70%)
+      TFT_BLUE         // Humid (70-100%)
+    },
+    .arc_angle = {0, 30, 70}
+  };
 
-  // Draw static labels
-  tft.setCursor(10, 70);
-  tft.print("Temperature:");
-  tft.setCursor(10, 120);
-  tft.print("Pressure:");
-  tft.setCursor(10, 170);
-  tft.print("Altitude:");
-  tft.setCursor(10, 220);
-  tft.print("Humidity:");
+  // Initialize meters
+  tempMeter.drawMeter(temp_config);
+  humidMeter.drawMeter(humid_config);
 
   updateTempDisplay();  // Initial display of values
 }
@@ -639,19 +683,22 @@ void updateTempDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
   
-  // Clear only the value areas
-  tft.fillRect(130, 55, 100, 200, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
+  float temp = bme.readTemperature();
+  float humidity = bme.readHumidity();
   
-  // Update with new values in fixed positions
-  tft.setCursor(130, 70);
-  tft.printf("%.1f C", bme.readTemperature());
+  // Update meter values with smooth animation
+  tempMeter.updateNeedle(temp, 30);
+  humidMeter.updateNeedle(humidity, 30);
+  
+  // Display digital values below meters
+  tft.setTextColor(TFT_WHITE);
+  tft.drawString(String(temp, 1) + "°C", 160, 100);
+  tft.drawString(String(humidity, 1) + "%", 160, 240);
+
   tft.setCursor(130, 120);
   tft.printf("%.1f hPa", bme.readPressure() / 100.0F);
   tft.setCursor(130, 170);
   tft.printf("%.1f m", bme.readAltitude(1013.25));
-  tft.setCursor(130, 220);
-  tft.printf("%.1f %%", bme.readHumidity());
 }
 
 void displayFileExplorer() {
