@@ -32,6 +32,18 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
+
+
+// Initialize TFT
+TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
+// Create single shared sprite for all UI elements
+TFT_eSprite uiSprite = TFT_eSprite(&tft);
+TFT_eSprite knob = TFT_eSprite(&tft);
+TFT_eSprite gauge1 = TFT_eSprite(&tft);
+TFT_eSprite gauge2 = TFT_eSprite(&tft);
+TFT_eSprite gaugebg = TFT_eSprite(&tft);
+TFT_eSprite menuSprite = TFT_eSprite(&tft);
+
 // PWM frequencies
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
@@ -56,18 +68,18 @@ char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
 
-// Initialize TFT and slider objects (updated for Fans in Main Menu)
-TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
-TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
-TFT_eSprite gauge1 = TFT_eSprite(&tft);
-TFT_eSprite gauge2 = TFT_eSprite(&tft);
-TFT_eSprite gaugebg = TFT_eSprite(&tft);
+
+// Function to cleanup sprites
+void cleanupSprites() {
+  if (knob.created()) knob.deleteSprite();
+  if (gauge1.created()) gauge1.deleteSprite();
+  if (gauge2.created()) gauge2.deleteSprite();
+  if (gaugebg.created()) gaugebg.deleteSprite();
+  if (menuSprite.created()) menuSprite.deleteSprite();
+}
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
 SliderWidget slider3 = SliderWidget(&tft, &knob);
-
-// Create sprite for main menu
-TFT_eSprite menuSprite = TFT_eSprite(&tft);
 
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1" // Calibration data file
