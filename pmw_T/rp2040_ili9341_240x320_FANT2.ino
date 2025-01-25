@@ -472,20 +472,43 @@ void loop(void) {
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
   
-  // Draw background circle
+  // Draw outer circle and background arc
   sprite->fillCircle(x, y, 50, TFT_DARKGREY);
   
-  // Calculate angle based on value
-  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
-  
-  // Draw gauge arc
-  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
+  // Draw background arc with smaller step size for smoothness
+  for (int i = -225; i <= 45; i++) {
     float rad = i * PI / 180.0;
     int x1 = x + cos(rad) * 48;
     int y1 = y + sin(rad) * 48;
     int x2 = x + cos(rad) * 40;
     int y2 = y + sin(rad) * 40;
-    sprite->drawLine(x1, y1, x2, y2, color);
+    sprite->drawLine(x1, y1, x2, y2, TFT_DARKGREY);
+  }
+  
+  // Calculate angle based on value with smoother mapping
+  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
+  
+  // Draw gauge arc with anti-aliasing effect
+  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
+    float rad = i * PI / 180.0;
+    // Draw multiple lines with slightly different thicknesses for anti-aliasing
+    for (int j = 0; j < 3; j++) {
+      int x1 = x + cos(rad) * (48 - j);
+      int y1 = y + sin(rad) * (48 - j);
+      int x2 = x + cos(rad) * (40 + j);
+      int y2 = y + sin(rad) * (40 + j);
+      sprite->drawLine(x1, y1, x2, y2, color);
+    }
+  }
+  
+  // Draw tick marks
+  for (int i = -225; i <= 45; i += 27) {  // 27 degrees = 10 tick marks
+    float rad = i * PI / 180.0;
+    int x1 = x + cos(rad) * 48;
+    int y1 = y + sin(rad) * 48;
+    int x2 = x + cos(rad) * 44;
+    int y2 = y + sin(rad) * 44;
+    sprite->drawLine(x1, y1, x2, y2, TFT_WHITE);
   }
   
   // Draw inner circle
@@ -714,11 +737,8 @@ void updateTempDisplay() {
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   
-  // Update temperature display
-  tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
-
   drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
   // Push updated sprites to screen at the same positions as initial display
   gauge1.pushSprite(60, 40);
