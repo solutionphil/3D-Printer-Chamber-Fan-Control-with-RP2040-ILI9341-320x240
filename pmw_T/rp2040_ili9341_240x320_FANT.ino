@@ -484,7 +484,6 @@ void displayLoadingScreen() {
 
 void displayScreen(int screen) {  // Update screen display logic
   tft.fillScreen(TFT_BLACK);  // Clear the screen
-   // tft.fillRectVGradient(0, 0, 240, 320, TFT_CYAN, TFT_BROWN);
   
   if (screen != 0) {  // Only show back button when not on main menu
     tft.setFreeFont(LABEL2_FONT);
@@ -614,44 +613,69 @@ void displayBGBrightness() {
 void displayTemp() {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
-  
+  tft.setTextSize(1);
+
   // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
     return;
   }
-
-  // Draw static labels
-  tft.setCursor(10, 70);
-  tft.print("Temperature:");
-  tft.setCursor(10, 120);
-  tft.print("Pressure:");
-  tft.setCursor(10, 170);
-  tft.print("Altitude:");
-  tft.setCursor(10, 220);
-  tft.print("Humidity:");
-
-  updateTempDisplay();  // Initial display of values
+  
+  // Draw temperature display
+  tft.drawRect(10, 50, 220, 100, TFT_WHITE);
+  tft.drawString("Temperature", 20, 60);
+  float temp = bme.readTemperature();
+  tft.setTextColor(TFT_GREEN);
+  tft.setTextSize(2);
+  tft.drawString(String(temp, 1) + " C", 20, 90);
+  tft.setTextSize(1);
+  
+  // Draw humidity display
+  tft.drawRect(10, 160, 220, 100, TFT_WHITE);
+  tft.drawString("Humidity", 20, 170);
+  float humidity = bme.readHumidity();
+  tft.setTextColor(TFT_CYAN);
+  tft.setTextSize(2);
+  tft.drawString(String(humidity, 1) + " %", 20, 200);
+  tft.setTextSize(1);
+  
+  // Draw pressure and altitude
+  tft.setTextColor(TFT_YELLOW);
+  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
+  tft.drawString("Altitude: " + String(bme.readAltitude(1013.25), 1) + " m", 20, 290);
+  
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
 }
 
 void updateTempDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
   
-  // Clear only the value areas
-  tft.fillRect(130, 55, 100, 200, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
+  float temp = bme.readTemperature();
+  float humidity = bme.readHumidity();
   
-  // Update with new values in fixed positions
-  tft.setCursor(130, 70);
-  tft.printf("%.1f C", bme.readTemperature());
-  tft.setCursor(130, 120);
-  tft.printf("%.1f hPa", bme.readPressure() / 100.0F);
-  tft.setCursor(130, 170);
-  tft.printf("%.1f m", bme.readAltitude(1013.25));
-  tft.setCursor(130, 220);
-  tft.printf("%.1f %%", bme.readHumidity());
+  // Update temperature display
+  tft.fillRect(20, 90, 200, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.setTextSize(2);
+  tft.drawString(String(temp, 1) + " C", 20, 90);
+  tft.setTextSize(1);
+  
+  // Update humidity display
+  tft.fillRect(20, 200, 200, 30, TFT_BLACK);
+  tft.setTextColor(TFT_CYAN);
+  tft.setTextSize(2);
+  tft.drawString(String(humidity, 1) + " %", 20, 200);
+  tft.setTextSize(1);
+  
+  // Update pressure and altitude
+  tft.fillRect(20, 270, 200, 40, TFT_BLACK);
+  tft.setTextColor(TFT_YELLOW);
+  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
+  tft.drawString("Altitude: " + String(bme.readAltitude(1013.25), 1) + " m", 20, 290);
 }
 
 void displayFileExplorer() {
