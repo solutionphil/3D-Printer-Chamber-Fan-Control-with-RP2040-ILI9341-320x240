@@ -32,31 +32,7 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-// Function prototypes
-void touch_calibrate();
-void displayScreen(int screen);
-void updateTempDisplay();
-void displayLoadingScreen();
-void displayLEDControl();
-void displayFanControl(uint8_t fanIndex);
-void handleFileButtonPress(uint8_t index);
-void drawMainMenu();
-void displayScreen1();
-void displayBGBrightness();
-void displayTemp();
-void displayFileExplorer();
-void displaySettings();
-void displayFileContents(String fileName);
-void displayInfoScreen();
-bool displayDeletionPrompt(String fileName);
-void cleanupSprites();
-void saveBrightness(float value);
-float loadBrightness();
-void saveLEDState(bool state);
-bool loadLEDState();
-void saveFanSpeeds(float speeds[3]);
-void loadFanSpeeds(float speeds[3]);
-void setNeoPixelColor(int screenNumber);
+
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -166,6 +142,8 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
+
+
 
 // Function to cleanup sprites and free memory
 void cleanupSprites() {
@@ -383,7 +361,7 @@ void setup() {
   loadFanSpeeds(fanSpeeds);
   for (int i = 0; i < 3; i++) {
     currentFanSpeeds[i] = fanSpeeds[i];
-    Fan_PWM[i]->setPW M(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
+    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
   }
 
   // Initialize the TFT display and set its rotation (Main Menu updated)
@@ -529,21 +507,15 @@ void loop(void) {
   }
 }
 
-  // Function to draw gauge on sprite with simplified gradients
+  // Function to draw gauge on sprite
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
   
-  // Create semi-circular background with banded gradient (4 steps)
-  const uint8_t gradientSteps = 4;
-  for (int step = 0; step < gradientSteps; step++) {
-    int rStart = 50 - (step * 5/gradientSteps);
-    int rEnd = 50 - ((step + 1) * 5/gradientSteps);
-    float gradientFactor = step / float(gradientSteps - 1);
-    uint8_t intensity = 32 + (gradientFactor * 32); // Range from 32 to 64
-    
-    for (int r = rStart; r > rEnd; r--) {
-      for (int i = -225; i <= 45; i++) {
-        float rad = i * PI / 180.0;
+  // Create semi-circular background with enhanced gradient effect
+  for (int r = 50; r >= 45; r--) {
+    for (int i = -225; i <= 45; i++) {
+      float rad = i * PI / 180.0;
+      float gradientFactor = (float)(r - 45) / 5.0; // Calculate gradient factor
       
       // Create gradient from dark to light grey
       uint8_t intensity = 32 + (gradientFactor * 32); // Range from 32 to 64
@@ -804,7 +776,11 @@ void displayTemp() {
     return;
   }
 
-
+  // Create title with shadow effect
+  tft.setTextColor(TFT_DARKGREY);
+  tft.drawString("Environmental Monitor", 31, 31);
+  tft.setTextColor(TFT_CYAN);
+  tft.drawString("Environmental Monitor", 30, 30);
 
   // Create sprites with proper dimensions if not already created
   if (!gauge1.created()) gauge1.createSprite(120, 160);
