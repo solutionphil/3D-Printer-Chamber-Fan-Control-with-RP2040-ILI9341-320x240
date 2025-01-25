@@ -32,7 +32,23 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-
+// Function Prototypes
+void touch_calibrate();
+void displayScreen(int screen);
+void updateTempDisplay();
+void displayLEDControl();
+void displayFanControl(uint8_t fanIndex);
+void handleFileButtonPress(uint8_t index);
+void drawMainMenu();
+void displayScreen1();
+void displayBGBrightness();
+void displayTemp();
+void displayFileExplorer();
+void displaySettings();
+void displayInfoScreen();
+void displayFileContents(String fileName);
+void displayLoadingScreen();
+void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor);
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -43,6 +59,8 @@ TFT_eSprite gauge1 = TFT_eSprite(&tft);
 TFT_eSprite gauge2 = TFT_eSprite(&tft);
 TFT_eSprite gaugebg = TFT_eSprite(&tft);
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
+bool gaugesInitialized = false;
+bool backgroundDrawn = false;
 
 // PWM frequencies
 float frequency = 1831;      // For brightness control
@@ -143,10 +161,10 @@ TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
 
-
-
 // Function to cleanup sprites and free memory
 void cleanupSprites() {
+    gaugesInitialized = false;
+    backgroundDrawn = false;
     // Only clean up sprites that aren't needed for the next screen
     if (currentScreen != 0 && uiSprite.created()) {
         uiSprite.deleteSprite();
@@ -381,9 +399,8 @@ void loop(void) {
   // Handle temperature screen updates
   if (currentScreen == 3) {
     unsigned long currentMillis = millis();
-    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL) {
+    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
       updateTempDisplay();
-    }
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
@@ -510,67 +527,77 @@ void loop(void) {
 // Function to draw gauge on sprite
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
-  
-  // Draw outer circle and background arc
-  sprite->fillCircle(x, y, 50, TFT_DARKGREY);
-  
-  // Draw background arc with smaller step size for smoothness
-  for (int i = -225; i <= 45; i++) {
-    float rad = i * PI / 180.0;
-    int x1 = x + cos(rad) * 48;
-    int y1 = y + sin(rad) * 48;
-    int x2 = x + cos(rad) * 40;
-    int y2 = y + sin(rad) * 40;
-    sprite->drawLine(x1, y1, x2, y2, TFT_DARKGREY);
+
+  // Draw outer circle with improved anti-aliasing
+  sprite->drawCircle(x, y, 50, TFT_WHITE);
+  for(int i = 49; i >= 47; i--) {
+    sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
-  
-  // Calculate angle based on value with smoother mapping
-  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
-  
-  // Draw gauge arc with anti-aliasing effect
-  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
+
+  // Draw tick marks with enhanced precision
+  int radius = 48;
+  for (float i = -225.0; i <= 45.0; i += 13.5) {
     float rad = i * PI / 180.0;
-    // Draw multiple lines with slightly different thicknesses for anti-aliasing
-    for (int j = 0; j < 3; j++) {
-      int x1 = x + cos(rad) * (48 - j);
-      int y1 = y + sin(rad) * (48 - j);
-      int x2 = x + cos(rad) * (40 + j);
-      int y2 = y + sin(rad) * (40 + j);
-      sprite->drawLine(x1, y1, x2, y2, color);
+    int len = (i == -225 || i == 45 || i == -90) ? 12 : 8;
+    // Draw anti-aliased tick marks with smoother edges
+    for(int w = 0; w < 3; w++) {
+      sprite->drawLine(
+        x + cos(rad) * (radius-w), 
+        y + sin(rad) * (radius-w),
+        x + cos(rad) * (radius-len-w), 
+        y + sin(rad) * (radius-len-w),
+        (abs(i + 225.0) < 0.1 || abs(i - 45.0) < 0.1 || abs(i + 90.0) < 0.1) ? TFT_WHITE : TFT_DARKGREY
+      );
     }
   }
+
+  // Calculate angles with improved precision
+  float startAngle = -225 * PI / 180.0;
+  float mappedValue = constrain(value, min_val, max_val);
+  float endAngle = -225 + (mappedValue - min_val) * (270) / (max_val - min_val);
+  endAngle = endAngle * PI / 180.0;
   
-  // Draw tick marks
-  for (int i = -225; i <= 45; i += 27) {  // 27 degrees = 10 tick marks
-    float rad = i * PI / 180.0;
-    int x1 = x + cos(rad) * 48;
-    int y1 = y + sin(rad) * 48;
-    int x2 = x + cos(rad) * 44;
-    int y2 = y + sin(rad) * 44;
-    sprite->drawLine(x1, y1, x2, y2, TFT_WHITE);
+  // Draw filled arc with enhanced smoothness and consistent filling
+  float stepSize = 0.01; // Even smaller step size for smoother arc
+  for (int r = 48; r >= 39; r--) {
+    for (float angle = startAngle; angle <= endAngle; angle += stepSize) {
+      float nextAngle = min(angle + stepSize, endAngle);
+      // Draw multiple overlapping lines for better anti-aliasing
+      for(int w = 0; w < 3; w++) {
+        uint16_t gradientColor;
+        if (r >= 45) {
+          gradientColor = sprite->color565((color >> 11) * 0.8, ((color >> 5) & 0x3F) * 0.8, (color & 0x1F) * 0.8);
+        } else {
+          gradientColor = color;
+        }
+        sprite->drawLine(
+          x + cos(angle) * (r-w), 
+          y + sin(angle) * (r-w),
+          x + cos(nextAngle) * (r-w), 
+          y + sin(nextAngle) * (r-w),
+          gradientColor
+        );
+      }
+    }
   }
-  
+
   // Draw inner circle
-  sprite->fillCircle(x, y, 38, bgColor);
-  
-  // Display value
-  sprite->setTextColor(TFT_WHITE, bgColor);
-  sprite->setTextSize(1);
+  for(int r = 35; r >= 30; r--) {
+    uint8_t shadow = map(r, 35, 30, 40, 0);
+    sprite->drawCircle(x, y, r, sprite->color565(shadow, shadow, shadow));
+  }
+  sprite->fillCircle(x, y, 29, bgColor);
+
+  // Draw labels and value
   char buf[10];
   sprintf(buf, "%.1f", value);
-  sprite->drawCentreString(buf, x, y - 10, 4);
   
-  // Display label
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->drawCentreString(buf, x, y-16, 4);
+  
   sprite->setTextSize(1);
-  sprite->drawCentreString(label, x, y + 15, 2);
-  
-  // Draw min/max values
-  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  char minBuf[10], maxBuf[10];
-  sprintf(minBuf, "%.0f", min_val);
-  sprintf(maxBuf, "%.0f", max_val);
-  sprite->drawString(minBuf, x - 45, y + 35, 1);
-  sprite->drawString(maxBuf, x + 35, y + 35, 1);
+  sprite->setTextColor(TFT_WHITE, bgColor);
+  sprite->drawCentreString(label, x, y+5, 2);
 }
 
 void displayLoadingScreen() {
@@ -737,9 +764,13 @@ void displayBGBrightness() {
 
 void displayTemp() {
   tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
+  
+  if (!backgroundDrawn) {
+    tft.setTextColor(TFT_WHITE);
+    tft.setFreeFont(LABEL2_FONT);
+    tft.setTextSize(1);
+    backgroundDrawn = true;
+  }
 
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
@@ -752,11 +783,20 @@ void displayTemp() {
     return;
   }
 
-  // Create sprites with proper dimensions if not already created
-  if (!gauge1.created()) gauge1.createSprite(120, 160);
-  if (!gauge2.created()) gauge2.createSprite(120, 160);
+  // Initialize sprites only once
+  if (!gaugesInitialized) {
+    if (!gauge1.created()) {
+      gauge1.createSprite(120, 160);
+      gauge1.setColorDepth(8);
+    }
+    if (!gauge2.created()) {
+      gauge2.createSprite(120, 160);
+      gauge2.setColorDepth(8);
+    }
+    gaugesInitialized = true;
+  }
 
-  // Initialize sprites if not already created
+  // Create sprites with proper dimensions if not already created
   if (!gauge1.created()) {
     gauge1.createSprite(120, 120);
   }
@@ -773,7 +813,7 @@ void displayTemp() {
   float hum = bme.readHumidity();
   
   // Draw to sprites instead of directly to screen
-  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge1, 60, 60, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
   
   // Push sprites to screen at centered positions
@@ -789,11 +829,17 @@ void updateTempDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
   
+  // Only update if sprites are initialized
+  if (!gaugesInitialized) {
+    displayTemp();
+    return;
+  }
+   
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   
 
-  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge1, 60, 60, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
   // Push updated sprites to screen at the same positions as initial display
