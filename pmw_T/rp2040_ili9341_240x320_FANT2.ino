@@ -737,6 +737,7 @@ void updateTempDisplay() {
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   
+
   drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
