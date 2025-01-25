@@ -32,7 +32,23 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-
+// Function Prototypes
+void touch_calibrate();
+void displayScreen(int screen);
+void updateTempDisplay();
+void displayLEDControl();
+void displayFanControl(uint8_t fanIndex);
+void handleFileButtonPress(uint8_t index);
+void drawMainMenu();
+void displayScreen1();
+void displayBGBrightness();
+void displayTemp();
+void displayFileExplorer();
+void displaySettings();
+void displayInfoScreen();
+void displayFileContents(String fileName);
+void displayLoadingScreen();
+void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor);
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -142,8 +158,6 @@ TFT_eSPI_Button noButton;
 TFT_eSPI_Button mainMenuButtons[5]; // Buttons for main menu
 
 int currentScreen = 0;
-
-
 
 // Function to cleanup sprites and free memory
 void cleanupSprites() {
@@ -381,9 +395,8 @@ void loop(void) {
   // Handle temperature screen updates
   if (currentScreen == 3) {
     unsigned long currentMillis = millis();
-    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL) {
+    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
       updateTempDisplay();
-    }
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
@@ -511,74 +524,70 @@ void loop(void) {
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
 
-  // Draw outer circles with gradient effect
-  for(int r = 50; r >= 48; r--) {
-    sprite->drawCircle(x, y, r, (r == 50) ? TFT_WHITE : TFT_DARKGREY);
+  // Draw outer circle with anti-aliasing
+  sprite->drawCircle(x, y, 50, TFT_WHITE);
+  for(int i = 49; i >= 48; i--) {
+    sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
 
-  // Draw tick marks with different lengths for major/minor ticks
-  for (int i = -225; i <= 45; i += 9) {
+  // Draw tick marks with improved precision
+  int radius = 48;
+  for (int i = -225; i <= 45; i += 13.5) {
     float rad = i * PI / 180.0;
-    int len = (i % 27 == 0) ? 12 : 8; // Longer marks every 3rd tick
-    sprite->drawLine(x + cos(rad) * 48, y + sin(rad) * 48,
-                    x + cos(rad) * (48-len), y + sin(rad) * (48-len),
-                    (i % 27 == 0) ? TFT_WHITE : TFT_DARKGREY);
+    int len = (i == -225 || i == 45 || i == -90) ? 12 : 8;
+    // Draw anti-aliased tick marks
+    for(int w = 0; w < 2; w++) {
+      sprite->drawLine(
+        x + cos(rad) * (radius-w), 
+        y + sin(rad) * (radius-w),
+        x + cos(rad) * (radius-len-w), 
+        y + sin(rad) * (radius-len-w),
+        (i == -225 || i == 45 || i == -90) ? TFT_WHITE : TFT_DARKGREY
+      );
+    }
   }
+
+  // Calculate angles with improved precision
+  float startAngle = -225 * PI / 180.0;
+  float mappedValue = constrain(value, min_val, max_val);
+  float endAngle = -225 + (mappedValue - min_val) * (270) / (max_val - min_val);
+  endAngle = endAngle * PI / 180.0;
   
-  // Calculate angle and color gradient based on value
-  float angle = map(value, min_val, max_val, -225, 45) * PI / 180.0;
-  uint16_t gradientColor;
-  
-  // Draw colored gauge arc with gradient effect
-  for (int i = -225; i <= (angle * 180.0 / PI); i++) {
-    float progress = (i + 225) / 270.0; // Calculate progress (0.0 to 1.0)
-    float rad = i * PI / 180.0;  // Convert degrees to radians
-    if (color == TFT_RED) {
-      // Temperature gradient: Blue -> Green -> Red
-      if (progress < 0.5) {
-        gradientColor = sprite->color565(0, progress * 510, 255 - progress * 510);
-      } else {
-        gradientColor = sprite->color565((progress - 0.5) * 510, 255 - (progress - 0.5) * 510, 0);
+  // Draw filled arc with smoother gradient and anti-aliasing
+  for (int r = 48; r >= 40; r--) {
+    float stepSize = 0.02; // Smaller step size for smoother arc
+    for (float angle = startAngle; angle <= endAngle; angle += stepSize) {
+      float nextAngle = min(angle + stepSize, endAngle);
+      // Draw multiple lines for anti-aliasing
+      for(int w = 0; w < 2; w++) {
+        sprite->drawLine(
+          x + cos(angle) * (r-w), 
+          y + sin(angle) * (r-w),
+          x + cos(nextAngle) * (r-w), 
+          y + sin(nextAngle) * (r-w),
+          color
+        );
       }
-    } else {
-      // Humidity gradient: Light Blue -> Dark Blue
-      gradientColor = sprite->color565(0, progress * 255, 255);
-    }
-
-    for(int w = 0; w < 3; w++) { // Thicker line for better visibility
-      sprite->drawLine(x + cos(rad) * (48-w), y + sin(rad) * (48-w),
-                      x + cos(rad) * 40, y + sin(rad) * 40,
-                      gradientColor);
     }
   }
 
-  // Draw inner circle with gradient shadow effect
+  // Draw inner circle
   for(int r = 35; r >= 30; r--) {
     uint8_t shadow = map(r, 35, 30, 40, 0);
     sprite->drawCircle(x, y, r, sprite->color565(shadow, shadow, shadow));
   }
   sprite->fillCircle(x, y, 29, bgColor);
 
-  // Draw min/max indicators
-  sprite->setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  sprite->setTextSize(1);
-  sprite->drawString(String(int(min_val)), x - 55, y + 40, 2);
-  sprite->drawString(String(int(max_val)), x + 35, y + 40, 2);
-
-  // Display value 
+  // Draw labels and value
   char buf[10];
   sprintf(buf, "%.1f", value);
- 
+  
   sprite->setTextColor(TFT_WHITE, bgColor);
   sprite->drawCentreString(buf, x, y-16, 4);
-
   
-  // Draw label 
   sprite->setTextSize(1);
-  
   sprite->setTextColor(TFT_WHITE, bgColor);
   sprite->drawCentreString(label, x, y+5, 2);
-
 }
 
 void displayLoadingScreen() {
