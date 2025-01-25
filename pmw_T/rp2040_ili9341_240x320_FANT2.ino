@@ -663,12 +663,20 @@ void displayTemp() {
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
 
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+
   // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
     return;
   }
+
+  // Create sprites with proper dimensions if not already created
+  if (!gauge1.created()) gauge1.createSprite(120, 160);
+  if (!gauge2.created()) gauge2.createSprite(120, 160);
 
   // Initialize sprites if not already created
   if (!gauge1.created()) {
@@ -688,11 +696,11 @@ void displayTemp() {
   
   // Draw to sprites instead of directly to screen
   drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 60, 160, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
   
-  // Push sprites to screen
-  gauge1.pushSprite(60, 20);
-  gauge2.pushSprite(60, 160);
+  // Push sprites to screen at centered positions
+  gauge1.pushSprite(60, 40);  // Adjusted Y position for temperature gauge
+  gauge2.pushSprite(60, 180); // Adjusted Y position for humidity gauge
 
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
@@ -707,11 +715,14 @@ void updateTempDisplay() {
   float hum = bme.readHumidity();
   
   // Update temperature display
- // tft.fillRoundRect(120, 80, 60, 60, 15, TFT_BLACK);
   tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
 
-  drawGaugeToSprite(&gauge1, 120, 80, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 120, 220, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge1, 60, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  
+  // Push updated sprites to screen at the same positions as initial display
+  gauge1.pushSprite(60, 40);
+  gauge2.pushSprite(60, 180);
 }
 
 void displayFileExplorer() {
