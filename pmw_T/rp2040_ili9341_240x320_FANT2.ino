@@ -32,101 +32,13 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-// GaugeSprite class definition
-class GaugeSprite {
-private:
-    TFT_eSprite* sprite;
-    TFT_eSPI* tft;
-    int16_t centerX;
-    int16_t centerY;
-    int16_t radius;
-    uint16_t backgroundColor;
-    uint16_t arcColor;
-    uint16_t needleColor;
-    float minValue;
-    float maxValue;
-    float currentValue;
-    const char* label;
-    const char* units;
-    
-    static const int ANGLE_START = 45;    // Start angle (45 degrees)
-    static const int ANGLE_END = 315;     // End angle (315 degrees)
-    static const int ANGLE_RANGE = 270;   // Total angle range (270 degrees)
-    
-    void drawArc(int16_t x, int16_t y, int16_t r, int16_t startAngle, int16_t endAngle, uint16_t color) {
-        float sx = cos((startAngle - 90) * DEG_TO_RAD);
-        float sy = sin((startAngle - 90) * DEG_TO_RAD);
-        uint16_t x1 = sx * r + x;
-        uint16_t y1 = sy * r + y;
+// PWM frequencies
+float frequency = 1831;      // For brightness control
+float fanFrequency = 20000;  // Separate frequency for fans
 
-        for (int i = startAngle; i < endAngle; i++) {
-            float sx2 = cos((i + 1 - 90) * DEG_TO_RAD);
-            float sy2 = sin((i + 1 - 90) * DEG_TO_RAD);
-            int x2 = sx2 * r + x;
-            int y2 = sy2 * r + y;
-            sprite->drawLine(x1, y1, x2, y2, color);
-            x1 = x2;
-            y1 = y2;
-        }
-    }
-
-public:
-    GaugeSprite(TFT_eSPI* _tft, int16_t x, int16_t y, int16_t r, 
-                const char* _label, const char* _units,
-                float _min, float _max, uint16_t bgColor = TFT_BLACK) 
-        : tft(_tft), centerX(x), centerY(y), radius(r),
-          label(_label), units(_units),
-          minValue(_min), maxValue(_max),
-          backgroundColor(bgColor),
-          arcColor(TFT_BLUE),
-          needleColor(TFT_RED),
-          currentValue(_min)
-    {
-        sprite = new TFT_eSprite(tft);
-        sprite->createSprite(r * 2, r * 2);
-        sprite->setTextDatum(MC_DATUM);
-    }
-    
-    ~GaugeSprite() {
-        if (sprite) {
-            sprite->deleteSprite();
-            delete sprite;
-        }
-    }
-
-    void setValue(float value) {
-        currentValue = constrain(value, minValue, maxValue);
-    }
-
-    void setColors(uint16_t arc, uint16_t needle) {
-        arcColor = arc;
-        needleColor = needle;
-    }
-
-    void draw() {
-        sprite->fillSprite(backgroundColor);
-        drawArc(radius, radius, radius - 2, ANGLE_START, ANGLE_END, arcColor);
-        
-        float valueRange = maxValue - minValue;
-        float valuePercent = (currentValue - minValue) / valueRange;
-        int needleAngle = ANGLE_START + (valuePercent * ANGLE_RANGE);
-        
-        float nx = cos((needleAngle - 90) * DEG_TO_RAD);
-        float ny = sin((needleAngle - 90) * DEG_TO_RAD);
-        sprite->drawLine(radius, radius, 
-                        radius + nx * (radius - 10),
-                        radius + ny * (radius - 10),
-                        needleColor);
-        
-        sprite->fillCircle(radius, radius, 5, needleColor);
-        
-        sprite->setTextColor(TFT_WHITE);
-        sprite->drawString(String(currentValue, 1) + units, radius, radius + 20);
-        sprite->drawString(label, radius, radius - 20);
-        
-        sprite->pushSprite(centerX - radius, centerY - radius);
-    }
-};
+// Debounce control
+unsigned long lastButtonPress = 0;
+const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 
 #define LED_STATE_FILE "/led_state.txt"
 // Global variables and definitions
@@ -147,6 +59,9 @@ char backLabel[] = "Back";
 // Initialize TFT and slider objects (updated for Fans in Main Menu)
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 TFT_eSprite knob = TFT_eSprite(&tft); // Create TFT sprite for slider knob
+TFT_eSprite gauge1 = TFT_eSprite(&tft);
+TFT_eSprite gauge2 = TFT_eSprite(&tft);
+TFT_eSprite gaugebg = TFT_eSprite(&tft);
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
 SliderWidget slider3 = SliderWidget(&tft, &knob);
@@ -346,6 +261,7 @@ void setNeoPixelColor(int screenNumber) {
 }
 
 void setup() {
+
   // Initialize serial communication for debugging
   Serial.begin(9600);  
   // Initialize I2C0
@@ -552,6 +468,39 @@ void loop(void) {
   }
 }
 
+void drawModernGauge(int x, int y, int r, float min_val, float max_val, float value, String label, uint16_t color, uint16_t bgColor) {
+  // Hintergrund
+  tft.fillCircle(x, y, r, TFT_DARKGREY);
+  
+  // Fülle den Gauge basierend auf dem Wert
+  float angle = map(value, min_val, max_val, -225, 45) * 3.14159 / 180;
+  for (int i = -225; i <= angle * 180 / 3.14159; i++) {
+    float rad = i * 3.14159 / 180;
+    int x1 = x + cos(rad) * (r - 2);
+    int y1 = y + sin(rad) * (r - 2);
+    int x2 = x + cos(rad) * (r - 10);
+    int y2 = y + sin(rad) * (r - 10);
+    tft.drawLine(x1, y1, x2, y2, color);
+  }
+  
+  // Innerer Kreis
+  tft.fillCircle(x, y, r - 12, bgColor);
+  
+  // Wert anzeigen
+  tft.setTextColor(TFT_WHITE, bgColor);
+  tft.setTextSize(1);
+  tft.drawCentreString(String(value, 1), x, y - 10, 4);
+  
+  // Einheit anzeigen
+  tft.setTextSize(1);
+  tft.drawCentreString(label, x, y + 15, 2);
+  
+  // Min und Max Werte
+  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  tft.drawString(String(min_val, 0), x - r + 5, y + r - 20, 1);
+  tft.drawString(String(max_val, 0), x + r - 20, y + r - 20, 1);
+}
+
 void displayLoadingScreen() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
@@ -699,9 +648,10 @@ void displayBGBrightness() {
 }
 
 void displayTemp() {
+  tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(0);
+  tft.setTextSize(1);
 
   // Only initialize BME280 once
   if (!bme.begin(0x76, &Wire)) {
@@ -709,55 +659,54 @@ void displayTemp() {
     tft.print("BME280 not found!");
     return;
   }
-  
-  // Create gauge instances
-  GaugeSprite tempGauge(&tft, 60, 140, 60, "TEMP", "C", 0, 50, TFT_BLACK);
-  GaugeSprite humidGauge(&tft, 180, 140, 60, "HUM", "%", 0, 100, TFT_BLACK);
-
-  // Set custom colors
-  tempGauge.setColors(TFT_RED, TFT_WHITE);
-  humidGauge.setColors(TFT_BLUE, TFT_WHITE);
-
-  // Initial readings
   float temp = bme.readTemperature();
+  float hum = bme.readHumidity();
+  
+  drawModernGauge(120, 80, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawModernGauge(120, 220, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+
+  /*
+  // Draw temperature display
+  tft.drawRect(10, 50, 220, 100, TFT_WHITE);
+  tft.drawString("Temperature", 20, 60);
+  float temp = bme.readTemperature();
+  tft.setTextColor(TFT_GREEN);
+  tft.setTextSize(2);
+  tft.drawString(String(temp, 1) + " C", 20, 90);
+  tft.setTextSize(1);
+  
+  // Draw humidity display
+  tft.drawRect(10, 160, 220, 100, TFT_WHITE);
+  tft.drawString("Humidity", 20, 170);
   float humidity = bme.readHumidity();
-
-  // Set initial values
-  tempGauge.setValue(temp);
-  humidGauge.setValue(humidity);
-
-  // Draw gauges
-  tempGauge.draw();
-  humidGauge.draw();
-   
+  tft.setTextColor(TFT_CYAN);
+  tft.setTextSize(2);
+  tft.drawString(String(humidity, 1) + " %", 20, 200);
+  tft.setTextSize(1);
+  
   // Draw pressure and altitude
   tft.setTextColor(TFT_YELLOW);
-  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 240);
-  tft.drawString("Altitude: " + String(bme.readAltitude(1013.25), 1) + " m", 20, 260);
+  tft.drawString("Pressure: " + String(bme.readPressure() / 100.0F, 1) + " hPa", 20, 270);
+  tft.drawString("Altitude: " + String(bme.readAltitude(1003.25), 1) + " m", 20, 290);
+  */
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
 }
 
-void updateTempDisplay() {
+ void updateTempDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
-
-  // Create gauge instances
-  static GaugeSprite tempGauge(&tft, 60, 140, 60, "TEMP", "C", 0, 50, TFT_BLACK);
-  static GaugeSprite humidGauge(&tft, 180, 140, 60, "HUM", "%", 0, 100, TFT_BLACK);
-
-  // Set custom colors
-  tempGauge.setColors(TFT_RED, TFT_WHITE);
-  humidGauge.setColors(TFT_BLUE, TFT_WHITE);
-
+  
   float temp = bme.readTemperature();
-  float humidity = bme.readHumidity();
+  float hum = bme.readHumidity();
+  
+  // Update temperature display
+tft.fillRoundRect(120, 80, 60, 60, 15, TFT_BLACK);
+tft.fillRoundRect(120, 220, 60, 60, 15, TFT_BLACK);
 
-  // Update gauge values
-  tempGauge.setValue(temp);
-  humidGauge.setValue(humidity);
-
-  // Redraw gauges
-  tempGauge.draw();
-  humidGauge.draw();
+  drawModernGauge(120, 80, 60, -10, 40, temp, "Temp C", TFT_RED, 0x8800);
+  drawModernGauge(120, 220, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
 }
 
 void displayFileExplorer() {
