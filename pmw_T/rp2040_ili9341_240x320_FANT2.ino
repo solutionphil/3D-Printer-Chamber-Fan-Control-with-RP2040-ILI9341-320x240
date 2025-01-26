@@ -32,23 +32,6 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-// Function Prototypes
-void touch_calibrate();
-void displayScreen(int screen);
-void updateTempDisplay();
-void displayLEDControl();
-void displayFanControl(uint8_t fanIndex);
-void handleFileButtonPress(uint8_t index);
-void drawMainMenu();
-void displayScreen1();
-void displayBGBrightness();
-void displayTemp();
-void displayFileExplorer();
-void displaySettings();
-void displayInfoScreen();
-void displayFileContents(String fileName);
-void displayLoadingScreen();
-void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor);
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -528,25 +511,25 @@ void loop(void) {
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
 
-  // Draw outer circle with improved anti-aliasing
-  sprite->drawCircle(x, y, 50, TFT_WHITE);
-  for(int i = 49; i >= 47; i--) {
+  // Draw outer circle with anti-aliasing
+  sprite->drawCircle(x, y, 62, TFT_WHITE);
+  for(int i = 59; i >= 58; i--) {
     sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
 
-  // Draw tick marks with enhanced precision
-  int radius = 48;
-  for (float i = -225.0; i <= 45.0; i += 13.5) {
+  // Draw tick marks with improved precision
+  int radius = 58;
+  for (int i = -225; i <= 45; i += 27) {
     float rad = i * PI / 180.0;
     int len = (i == -225 || i == 45 || i == -90) ? 12 : 8;
-    // Draw anti-aliased tick marks with smoother edges
-    for(int w = 0; w < 3; w++) {
+    // Draw anti-aliased tick marks
+    for(int w = 0; w < 1; w++) {
       sprite->drawLine(
         x + cos(rad) * (radius-w), 
         y + sin(rad) * (radius-w),
         x + cos(rad) * (radius-len-w), 
         y + sin(rad) * (radius-len-w),
-        (abs(i + 225.0) < 0.1 || abs(i - 45.0) < 0.1 || abs(i + 90.0) < 0.1) ? TFT_WHITE : TFT_DARKGREY
+        (i == -225 || i == 45 || i == -90) ? TFT_WHITE : TFT_DARKGREY
       );
     }
   }
@@ -557,36 +540,30 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   float endAngle = -225 + (mappedValue - min_val) * (270) / (max_val - min_val);
   endAngle = endAngle * PI / 180.0;
   
-  // Draw filled arc with enhanced smoothness and consistent filling
-  float stepSize = 0.01; // Even smaller step size for smoother arc
-  for (int r = 48; r >= 39; r--) {
+  // Draw filled arc with smoother gradient and anti-aliasing
+  for (int r = 58; r >= 42; r--) {
+    float stepSize = 0.01; // Smaller step size for smoother arc
     for (float angle = startAngle; angle <= endAngle; angle += stepSize) {
       float nextAngle = min(angle + stepSize, endAngle);
-      // Draw multiple overlapping lines for better anti-aliasing
-      for(int w = 0; w < 3; w++) {
-        uint16_t gradientColor;
-        if (r >= 45) {
-          gradientColor = sprite->color565((color >> 11) * 0.8, ((color >> 5) & 0x3F) * 0.8, (color & 0x1F) * 0.8);
-        } else {
-          gradientColor = color;
-        }
+      // Draw multiple lines for anti-aliasing
+      for(int w = 0; w < 2; w++) {
         sprite->drawLine(
           x + cos(angle) * (r-w), 
           y + sin(angle) * (r-w),
           x + cos(nextAngle) * (r-w), 
           y + sin(nextAngle) * (r-w),
-          gradientColor
+          color
         );
       }
     }
   }
 
   // Draw inner circle
-  for(int r = 35; r >= 30; r--) {
-    uint8_t shadow = map(r, 35, 30, 40, 0);
+  for(int r = 41; r >= 36; r--) {
+    uint8_t shadow = map(r, 38, 36, 46, 0);
     sprite->drawCircle(x, y, r, sprite->color565(shadow, shadow, shadow));
   }
-  sprite->fillCircle(x, y, 29, bgColor);
+  sprite->fillCircle(x, y, 35, bgColor);
 
   // Draw labels and value
   char buf[10];
@@ -690,7 +667,7 @@ void drawMainMenu() {
 
   // Initialize buttons with menuSprite instead of tft
   mainMenuButtons[0].initButton(&menuSprite, 120, 120, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
-  mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Temperature", 1);
+  mainMenuButtons[1].initButton(&menuSprite, 120, 180, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Temp", 1);
   mainMenuButtons[2].initButton(&menuSprite, 120, 300, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
   for (uint8_t i = 0; i < 3; i++) {  // Adjusted loop to 3 buttons
@@ -786,11 +763,11 @@ void displayTemp() {
   // Initialize sprites only once
   if (!gaugesInitialized) {
     if (!gauge1.created()) {
-      gauge1.createSprite(120, 160);
+      gauge1.createSprite(140, 140);
       gauge1.setColorDepth(8);
     }
     if (!gauge2.created()) {
-      gauge2.createSprite(120, 160);
+      gauge2.createSprite(140, 140);
       gauge2.setColorDepth(8);
     }
     gaugesInitialized = true;
@@ -798,10 +775,10 @@ void displayTemp() {
 
   // Create sprites with proper dimensions if not already created
   if (!gauge1.created()) {
-    gauge1.createSprite(120, 120);
+    gauge1.createSprite(140, 140);
   }
   if (!gauge2.created()) {
-    gauge2.createSprite(120, 120);
+    gauge2.createSprite(140, 140);
   }
   if (!gaugebg.created()) {
     gaugebg.createSprite(240, 320);
@@ -813,12 +790,12 @@ void displayTemp() {
   float hum = bme.readHumidity();
   
   // Draw to sprites instead of directly to screen
-  drawGaugeToSprite(&gauge1, 60, 60, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
   
   // Push sprites to screen at centered positions
-  gauge1.pushSprite(60, 40);  // Adjusted Y position for temperature gauge
-  gauge2.pushSprite(60, 180); // Adjusted Y position for humidity gauge
+  gauge1.pushSprite(45, 40);  // Adjusted Y position for temperature gauge
+  gauge2.pushSprite(45, 170); // Adjusted Y position for humidity gauge
 
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
@@ -839,12 +816,12 @@ void updateTempDisplay() {
   float hum = bme.readHumidity();
   
 
-  drawGaugeToSprite(&gauge1, 60, 60, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 60, 60, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge1, 70, 65, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
   // Push updated sprites to screen at the same positions as initial display
-  gauge1.pushSprite(60, 40);
-  gauge2.pushSprite(60, 180);
+  gauge1.pushSprite(45, 40);
+  gauge2.pushSprite(45, 170);
 }
 
 void displayFileExplorer() {
