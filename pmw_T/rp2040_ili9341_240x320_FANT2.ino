@@ -816,7 +816,7 @@ void updateTempDisplay() {
   float hum = bme.readHumidity();
   
 
-  drawGaugeToSprite(&gauge1, 70, 65, 0, 80, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
   
   // Push updated sprites to screen at the same positions as initial display
