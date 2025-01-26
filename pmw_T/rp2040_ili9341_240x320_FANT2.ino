@@ -521,18 +521,23 @@ void loop(void) {
 // Function to draw gauge on sprite
 void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float max_val, float value, const char* label, uint16_t color, uint16_t bgColor) {
   sprite->fillSprite(TFT_BLACK);
-
+  
+  // Calculate scaling factor for VOC gauge (98px vs 140px)
+  float scale = (sprite->width() == 98) ? 0.7 : 1.0;
+  int outerRadius = round(62 * scale);
+  int innerRadius = round(58 * scale);
+  
   // Draw outer circle with anti-aliasing
-  sprite->drawCircle(x, y, 62, TFT_WHITE);
-  for(int i = 59; i >= 58; i--) {
+  sprite->drawCircle(x, y, outerRadius, TFT_WHITE);
+  for(int i = round(59 * scale); i >= round(58 * scale); i--) {
     sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
 
   // Draw tick marks with improved precision
-  int radius = 58;
+  int radius = round(58 * scale);
   for (int i = -225; i <= 45; i += 27) {
     float rad = i * PI / 180.0;
-    int len = (i == -225 || i == 45 || i == -90) ? 12 : 8;
+    int len = (i == -225 || i == 45 || i == -90) ? round(12 * scale) : round(8 * scale);
     // Draw anti-aliased tick marks
     for(int w = 0; w < 1; w++) {
       sprite->drawLine(
@@ -552,7 +557,7 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   endAngle = endAngle * PI / 180.0;
   
   // Draw filled arc with smoother gradient and anti-aliasing
-  for (int r = 58; r >= 42; r--) {
+  for (int r = round(fillRadius * scale); r >= round(42 * scale); r--) {
     float stepSize = 0.01; // Smaller step size for smoother arc
     for (float angle = startAngle; angle <= endAngle; angle += stepSize) {
       float nextAngle = min(angle + stepSize, endAngle);
@@ -578,10 +583,16 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
 
   // Draw labels and value
   char buf[10];
-  sprintf(buf, "%.1f", value);
+  if (strstr(label, "VOC")) {
+    sprintf(buf, "%d", (int)value); // Integer format for VOC
+  } else {
+    sprintf(buf, "%.1f", value); // Keep decimal for temp and humidity
+  }
   
   sprite->setTextColor(TFT_WHITE, bgColor);
-  sprite->drawCentreString(buf, x, y-16, 4);
+  // Adjust text size for VOC gauge
+  int textSize = (sprite->width() == 98) ? 2 : 4;
+  sprite->drawCentreString(buf, x, y-(16 * scale), textSize);
   
   sprite->setTextSize(1);
   sprite->setTextColor(TFT_WHITE, bgColor);
@@ -748,36 +759,6 @@ void displayBGBrightness() {
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
   slider1.setSliderPosition(dutyCycle);
 }
-void updateTempAndAirQualityDisplay() {
-  unsigned long currentMillis = millis();
-  lastSensorUpdate = currentMillis;
-  
-  // Only update if sprites are initialized
-  if (!gaugesInitialized) {
-    displayTempAndAirQuality();
-    return;
-  }
-   
-  float temp = bme.readTemperature();
-  float hum = bme.readHumidity();
-  
-  // Get VOC reading with temperature/humidity compensation
-  int32_t voc_index = sgp.measureVocIndex(temp, hum);
-  uint16_t voc_color = TFT_GREEN;
-  if (voc_index > 100) voc_color = TFT_YELLOW;
-  if (voc_index > 200) voc_color = TFT_ORANGE;
-  if (voc_index > 300) voc_color = TFT_RED;
-  
-  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
-  drawGaugeToSprite(&gauge3, 70, 75, 0, 500, voc_index, "VOC", voc_color, 0x0011);
-  
-  // Push updated sprites to screen with VOC gauge on the right
-  gauge1.pushSprite(10, 40);
-  gauge2.pushSprite(10, 170);
-  gauge3.pushSprite(140, 105);
-}
-
 void displayTempAndAirQuality() {
   tft.fillScreen(TFT_BLACK);
   
@@ -815,7 +796,7 @@ void displayTempAndAirQuality() {
       gauge2.setColorDepth(8);
     }
     if (!gauge3.created()) {
-      gauge3.createSprite(140, 140);
+      gauge3.createSprite(98, 98); // Create smaller sprite for VOC gauge (70% of 140)
       gauge3.setColorDepth(8);
     }
     gaugesInitialized = true;
@@ -829,7 +810,7 @@ void displayTempAndAirQuality() {
     gauge2.createSprite(140, 140);
   }
   if (!gauge3.created()) {
-    gauge3.createSprite(140, 140);
+    gauge3.createSprite(98, 98); // Create smaller sprite for VOC gauge (70% of 140)
   }
   if (!gaugebg.created()) {
     gaugebg.createSprite(240, 320);
@@ -845,17 +826,46 @@ void displayTempAndAirQuality() {
   if (voc_index > 200) voc_color = TFT_ORANGE;
   if (voc_index > 300) voc_color = TFT_RED;
   
-  // Draw to sprites instead of directly to screen
+  // Draw to sprites instead of screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
-  drawGaugeToSprite(&gauge3, 70, 75, 0, 500, voc_index, "VOC", voc_color, 0x0011);
+  drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
   
-  // Push sprites to screen with VOC gauge on the right
+  // Push sprites to screen with VOC gauge on the right (pre-scaled)
   gauge1.pushSprite(10, 40);
   gauge2.pushSprite(10, 170);
-  gauge3.pushSprite(140, 105);
+  gauge3.pushSprite(145, 110);
 }
 
+void updateTempAndAirQualityDisplay() {
+  unsigned long currentMillis = millis();
+  lastSensorUpdate = currentMillis;
+  
+  // Only update if sprites are initialized
+  if (!gaugesInitialized) {
+    displayTempAndAirQuality();
+    return;
+  }
+   
+  float temp = bme.readTemperature();
+  float hum = bme.readHumidity();
+  
+  // Get VOC reading with temperature/humidity compensation
+  int32_t voc_index = sgp.measureVocIndex(temp, hum);
+  uint16_t voc_color = TFT_GREEN;
+  if (voc_index > 100) voc_color = TFT_YELLOW;
+  if (voc_index > 200) voc_color = TFT_ORANGE;
+  if (voc_index > 300) voc_color = TFT_RED;
+  
+  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
+  
+  // Push updated sprites to screen with VOC gauge on the right (pre-scaled)
+  gauge1.pushSprite(10, 40);
+  gauge2.pushSprite(10, 170);
+  gauge3.pushSprite(145, 110);
+}
 void displayFileExplorer() {
   // Don't clean up sprites here, let displayScreen handle it
   tft.fillScreen(TFT_BLACK);
