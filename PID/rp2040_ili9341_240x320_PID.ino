@@ -22,27 +22,32 @@
  * - Adafruit_BME280: For environmental sensing
  * - Adafruit_SGP40: For air quality sensing
  * - Wire: For I2C communication
+ * - QuickPID: For PID control
  */
-
+#include <Adafruit_NeoPixel.h>
+#include <QuickPID.h>     // Add QuickPID library
+#include <Adafruit_BME280.h>
 #include <LittleFS.h>
+#include <Adafruit_SGP40.h>
+#include <Wire.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
 #include <TFT_eWidget.h>  // Widget library for sliders
 #include "RP2040_PWM.h"   // PWM library
-#include <Adafruit_NeoPixel.h>
-#include <Adafruit_BME280.h>
-#include <Adafruit_SGP40.h>
-#include <Wire.h>
 
 // Sensor status flags
 bool bme280_initialized = false;
 bool sgp40_initialized = false;
 
+#define PID_SETTINGS_FILE "/pid_settings.txt"
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 // Create single shared sprite for all UI elements
 TFT_eSprite uiSprite = TFT_eSprite(&tft);
 TFT_eSprite knob = TFT_eSprite(&tft);
+TFT_eSprite pidSprite = TFT_eSprite(&tft);
+TFT_eSprite tempSprite = TFT_eSprite(&tft);
+TFT_eSprite controlSprite = TFT_eSprite(&tft);
 TFT_eSprite gauge1 = TFT_eSprite(&tft);
 TFT_eSprite gauge2 = TFT_eSprite(&tft);
 TFT_eSprite gauge3 = TFT_eSprite(&tft);
@@ -79,6 +84,10 @@ char backButtonLabel[] = "Back";
 char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
+char plusLabel[] = "+";
+char minusLabel[] = "-";
+char pidEnableLabel[] = "Enable PID";
+char pidDisableLabel[] = "Disable PID";
 
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
@@ -131,6 +140,20 @@ RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
 float dutyCycle; //= 90;  // Default brightness value
+
+// PID Control variables
+float pidSetpoint = 25.0f;    // Target temperature
+float pidInput;              // Current temperature
+float pidOutput;             // PID output (0-100 for fan speed)
+bool pidEnabled = false;      // PID control enabled flag
+
+// PID parameters
+float Kp = 2.0f;
+float Ki = 5.0f;
+float Kd = 1.0f;
+
+// Initialize PID
+QuickPID myPID(&pidInput, &pidOutput, &pidSetpoint);
 
 // PWM Fan Control
 #define FAN1_PIN 27
@@ -372,7 +395,16 @@ void setup() {
   for (int i = 0; i < 3; i++) {
     Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, fanFrequency, 0);
   }
-
+  
+  // Initialize PID controller
+  myPID.SetTunings(Kp, Ki, Kd);
+  myPID.SetMode(myPID.Control::manual);
+  myPID.SetOutputLimits(0, 100);
+  myPID.SetSampleTimeUs(100000); // 100ms update rate
+  
+  // Load PID settings from LittleFS
+  loadPIDSettings();
+  
   // Load saved fan speeds
   float fanSpeeds[3] = {0, 0, 0};
   loadFanSpeeds(fanSpeeds);
@@ -750,11 +782,60 @@ void drawMainMenu() {
 }
 
 void displayPID() {
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
-  tft.setCursor(10, 20);
-  tft.print("Screen 1");
+  // Create sprites with proper dimensions for 240x320 display
+  if (!pidSprite.created()) {
+    pidSprite.createSprite(240, 320);
+    pidSprite.setTextColor(TFT_WHITE);
+    pidSprite.setFreeFont(LABEL2_FONT);
+  }
+  if (!tempSprite.created()) {
+    tempSprite.createSprite(220, 80);  // Larger sprite for temperature display
+    tempSprite.setTextColor(TFT_WHITE);
+    tempSprite.setFreeFont(LABEL2_FONT);
+  }
+  if (!controlSprite.created()) {
+    controlSprite.createSprite(220, 60);  // Adjusted for fan control display
+    controlSprite.setTextColor(TFT_WHITE);
+    controlSprite.setFreeFont(LABEL2_FONT);
+  }
+
+  // Draw title centered at top
+  pidSprite.drawCentreString("PID Control", 120, 10, 2);
+  screenButton.drawButton();
+
+  // Display current temperature
+  float currentTemp = bme.readTemperature();
+  pidInput = currentTemp;
+  
+  // Draw temperature displays in larger format
+  tempSprite.fillSprite(TFT_BLACK);
+  tempSprite.drawString("Current:", 20, 10);
+  tempSprite.setTextFont(4);  // Larger font for temperature
+  tempSprite.drawString(String(currentTemp, 1) + "°C", 120, 10);
+  tempSprite.setTextFont(2);
+  tempSprite.drawString("Target:", 20, 45);
+  tempSprite.setTextFont(4);
+  tempSprite.drawString(String(pidSetpoint, 1) + "°C", 120, 45);
+  tempSprite.pushSprite(10, 60);
+
+  // Position setpoint control buttons
+  mainMenuButtons[0].initButton(&pidSprite, 190, 85, 40, 35, TFT_WHITE, TFT_BLUE, TFT_WHITE, plusLabel, 1);
+  mainMenuButtons[1].initButton(&pidSprite, 190, 125, 40, 35, TFT_WHITE, TFT_BLUE, TFT_WHITE, minusLabel, 1);
+  mainMenuButtons[0].drawButton();
+  mainMenuButtons[1].drawButton();
+
+  // Draw PID enable/disable button
+  mainMenuButtons[2].initButton(&pidSprite, 120, 200, 200, 40, TFT_WHITE, 
+    pidEnabled ? TFT_RED : TFT_GREEN, TFT_WHITE, 
+    pidEnabled ? pidDisableLabel : pidEnableLabel, 1);
+  mainMenuButtons[2].drawButton();
+
+  // Draw fan speed indicator
+  controlSprite.fillSprite(TFT_BLACK);
+  controlSprite.drawCentreString("Fan Speed", 110, 5, 2);
+  controlSprite.setTextFont(4);
+  controlSprite.drawCentreString(String(int(pidOutput)) + "%", 110, 25);
+  controlSprite.pushSprite(10, 250);
 }
 
 void displayBGBrightness() {
@@ -1112,14 +1193,15 @@ void displayFanControl(uint8_t fanIndex) {
           } else {
             // Original single fan update code
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
+            int yOffset = i * 90;
+            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+            tft.setTextColor(TFT_GREEN);
+            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+            tft.setTextColor(TFT_WHITE);
             
-            // Mark changes as pending and update timestamp
-            fanChangesPending = true;
-            lastFanChange = millis();
-            
-            // If we're exiting the screen, force save
-            if (screenButton.justPressed())
-              saveFanSpeeds(currentFanSpeeds);
+            // Save individual fan speed changes
+            saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
@@ -1429,5 +1511,47 @@ void displayInfoScreen() {
     tft.setFreeFont(LABEL2_FONT);  // Use larger font
     tft.setCursor(10, 300);
     tft.print("No I2C devices found");
+  }
+}
+
+void savePIDSettings() {
+  File f = LittleFS.open(PID_SETTINGS_FILE, "w");
+  if (f) {
+    f.println(Kp);
+    f.println(Ki);
+    f.println(Kd);
+    f.println(pidSetpoint);
+    f.println(pidEnabled ? "1" : "0");
+    f.close();
+    Serial.println("PID settings saved successfully");
+  } else {
+    Serial.println("Failed to save PID settings");
+  }
+}
+
+void loadPIDSettings() {
+  if (LittleFS.exists(PID_SETTINGS_FILE)) {
+    File f = LittleFS.open(PID_SETTINGS_FILE, "r");
+    if (f) {
+      String kp = f.readStringUntil('\n');
+      String ki = f.readStringUntil('\n');
+      String kd = f.readStringUntil('\n');
+      String sp = f.readStringUntil('\n');
+      String en = f.readStringUntil('\n');
+      
+      // Remove any whitespace/newlines
+      kp.trim(); ki.trim(); kd.trim(); sp.trim(); en.trim();
+      
+      Kp = kp.toFloat();
+      Ki = ki.toFloat();
+      Kd = kd.toFloat();
+      pidSetpoint = sp.toFloat();
+      pidEnabled = (en == "1");
+      
+      f.close();
+      Serial.println("PID settings loaded successfully");
+    } else {
+      Serial.println("Failed to load PID settings");
+    }
   }
 }
