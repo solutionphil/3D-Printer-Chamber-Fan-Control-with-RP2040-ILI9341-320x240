@@ -1258,9 +1258,13 @@ void displayInfoScreen() {
   // I2C Device Detection
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(10, 250);
-  tft.print("I2C0 Devices:");
+  tft.print("I2C0 Bus:");
   tft.setCursor(10, 290);
-  tft.print("I2C1 Devices:");
+  tft.print("I2C1 Bus:");
+  
+  // Draw bus lines with improved visibility
+  tft.drawFastHLine(20, 270, 200, TFT_BLUE);    // I2C0 bus line
+  tft.drawFastHLine(20, 310, 200, TFT_BLUE);    // I2C1 bus line
   
   // Scan both I2C buses
   bool foundDevice = false;
@@ -1276,13 +1280,18 @@ void displayInfoScreen() {
     
     if (error == 0) {
       if (!foundDevice) foundDevice = true;
-      tft.setTextColor(TFT_GREEN);
-      tft.setCursor(20, yPos);
-      tft.print("0x");
+      int xPos = map(address, 0, 127, 20, 220);  // Map address to x position
+      
+      // Draw larger device box
+      tft.fillRect(xPos-15, 255, 30, 30, TFT_BLUE);
+      tft.drawRect(xPos-15, 255, 30, 30, TFT_WHITE);
+      
+      // Draw address with larger font
+      tft.setTextColor(TFT_WHITE);
+      tft.setFreeFont(LABEL2_FONT);  // Use larger font
+      tft.setCursor(xPos-12, 275);
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      xPos += 80;
-      if (xPos > 220) break;
     }
   }
   
@@ -1299,20 +1308,22 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      xPos += 80;
+      xPos += 60;
       if (xPos > 220) break;
     }
   }
 
   if (!foundDevice) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 270);
-    tft.print("No devices found");
+    tft.setFreeFont(LABEL2_FONT);  // Use larger font
+    tft.setCursor(60, 270);
+    tft.print("No I2C devices found");
   }
   
   if (!foundDevice1) {
     tft.setTextColor(TFT_RED);
-    tft.setCursor(20, 310);
-    tft.print("No devices found");
+    tft.setFreeFont(LABEL2_FONT);  // Use larger font
+    tft.setCursor(60, 310);
+    tft.print("No I2C devices found");
   }
 }
