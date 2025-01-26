@@ -875,8 +875,8 @@ void displayTempAndAirQuality() {
   uint16_t voc_color = TFT_DARKGREEN ;
   if (voc_index > 100) voc_color = TFT_GREEN;
   if (voc_index > 200) voc_color = TFT_YELLOW;
-  if (voc_index > 250) voc_color = TFT_ORANGE;
-  if (voc_index > 300) voc_color = TFT_RED;
+  if (voc_index > 300) voc_color = TFT_ORANGE;
+  if (voc_index > 400) voc_color = TFT_RED;
   
   // Draw to sprites instead of screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
