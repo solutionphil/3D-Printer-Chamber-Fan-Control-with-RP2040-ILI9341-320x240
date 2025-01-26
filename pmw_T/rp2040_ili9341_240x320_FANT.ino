@@ -1190,8 +1190,8 @@ void displayInfoScreen() {
   screenButton.drawButton();
 
   // Rest of header
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setCursor(10, 20);
+  tft.setFreeFont(&Yellowtail_32);
+  tft.setCursor(10, 30);
   tft.print("System Info");
   tft.setFreeFont(LABEL2_FONT);
 
