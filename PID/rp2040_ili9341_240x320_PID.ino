@@ -673,11 +673,12 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   sprite->setTextColor(TFT_WHITE, bgColor);
   // Adjust text size and position for VOC gauge
   int textSize = (sprite->width() == 98) ? 2 : 4;
-  sprite->drawCentreString(buf, x, y-(round(16 * scale)), textSize);
+  sprite->setTextDatum(MC_DATUM);  // Set text datum to middle-center
+  sprite->drawString(buf, x, y-(round(16 * scale)));
   
   sprite->setTextSize(1);
   sprite->setTextColor(TFT_WHITE, bgColor);
-  sprite->drawCentreString(label, x, y+5, 2);
+  sprite->drawString(label, x, y+5);
 }
 
 void displayLoadingScreen() {
@@ -800,8 +801,11 @@ void displayPID() {
   }
 
   // Draw title centered at top
-  pidSprite.drawCentreString("PID Control", 120, 10, 2);
-  screenButton.drawButton();
+  controlSprite.fillSprite(TFT_BLACK);
+  controlSprite.setTextDatum(MC_DATUM);  // Set text datum to middle-center
+  controlSprite.drawString("Fan Speed", 110, 5);
+  controlSprite.drawString(String(int(pidOutput)) + "%", 110, 25);
+  controlSprite.pushSprite(10, 250);
 
   // Display current temperature
   float currentTemp = bme.readTemperature();
@@ -811,11 +815,11 @@ void displayPID() {
   tempSprite.fillSprite(TFT_BLACK);
   tempSprite.drawString("Current:", 20, 10);
   tempSprite.setTextFont(4);  // Larger font for temperature
-  tempSprite.drawString(String(currentTemp, 1) + "°C", 120, 10);
+  tempSprite.drawString(String(currentTemp, 1) + "Â°C", 120, 10);
   tempSprite.setTextFont(2);
   tempSprite.drawString("Target:", 20, 45);
   tempSprite.setTextFont(4);
-  tempSprite.drawString(String(pidSetpoint, 1) + "°C", 120, 45);
+  tempSprite.drawString(String(pidSetpoint, 1) + "Â°C", 120, 45);
   tempSprite.pushSprite(10, 60);
 
   // Position setpoint control buttons
@@ -832,9 +836,9 @@ void displayPID() {
 
   // Draw fan speed indicator
   controlSprite.fillSprite(TFT_BLACK);
-  controlSprite.drawCentreString("Fan Speed", 110, 5, 2);
-  controlSprite.setTextFont(4);
-  controlSprite.drawCentreString(String(int(pidOutput)) + "%", 110, 25);
+  controlSprite.setTextDatum(MC_DATUM);  // Set text datum to middle-center
+  controlSprite.drawString("Fan Speed", 110, 5);
+  controlSprite.drawString(String(int(pidOutput)) + "%", 110, 25);
   controlSprite.pushSprite(10, 250);
 }
 
