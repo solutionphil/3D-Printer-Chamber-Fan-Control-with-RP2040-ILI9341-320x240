@@ -1281,7 +1281,7 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      xPos += 60;
+      xPos += 80;
       if (xPos > 220) break;
     }
   }
@@ -1299,7 +1299,7 @@ void displayInfoScreen() {
       tft.print("0x");
       if (address < 16) tft.print("0");
       tft.print(address, HEX);
-      xPos += 60;
+      xPos += 80;
       if (xPos > 220) break;
     }
   }
