@@ -34,6 +34,9 @@
 #include <Adafruit_SGP40.h>
 #include <Wire.h>
 
+// Sensor status flags
+bool bme280_initialized = false;
+bool sgp40_initialized = false;
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -382,8 +385,26 @@ void setup() {
   tft.init();  
   tft.setRotation(0);  
 
-  // Initialize the SGP40 air quality sensor
-  sgp.begin();
+  // Initialize BME280
+  if (bme.begin(0x76, &Wire)) {
+    Serial.println("BME280 sensor found!");
+    bme280_initialized = true;
+  } else {
+    Serial.println("Could not find BME280 sensor!");
+    bme280_initialized = false;
+  }
+
+  // Initialize SGP40
+  if (sgp.begin()) {
+    Serial.println("SGP40 sensor found!");
+    sgp40_initialized = true;
+  } else {
+    Serial.println("Could not find SGP40 sensor!");
+    sgp40_initialized = false;
+  }
+
+  // Small delay to ensure stable sensor initialization
+  delay(100);
 
   //Calibrate the touch screen and display the initial screen
   touch_calibrate();  
@@ -801,14 +822,17 @@ void displayTempAndAirQuality() {
   screenButton.drawButton();
 
   // Only initialize BME280 and SGP40 once
-  if (!bme.begin(0x76, &Wire)) {
+  if (!bme280_initialized) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
+    delay(2000);  // Show error for 2 seconds
     return;
   }
-  if (!sgp.begin()) {
+  
+  if (!sgp40_initialized) {
     tft.setCursor(10, 90);
     tft.print("SGP40 not found!");
+    delay(2000);  // Show error for 2 seconds
     return;
   }
 
@@ -848,9 +872,10 @@ void displayTempAndAirQuality() {
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   int32_t voc_index = sgp.measureVocIndex(temp, hum);
-  uint16_t voc_color = TFT_GREEN;
-  if (voc_index > 100) voc_color = TFT_YELLOW;
-  if (voc_index > 200) voc_color = TFT_ORANGE;
+  uint16_t voc_color = TFT_DARKGREEN ;
+  if (voc_index > 100) voc_color = TFT_GREEN;
+  if (voc_index > 200) voc_color = TFT_YELLOW;
+  if (voc_index > 250) voc_color = TFT_ORANGE;
   if (voc_index > 300) voc_color = TFT_RED;
   
   // Draw to sprites instead of screen
