@@ -20,6 +20,7 @@
  * - RP2040_PWM: For PWM-based brightness and fan speed control
  * - Adafruit_NeoPixel: For NeoPixel control
  * - Adafruit_BME280: For environmental sensing
+ * - Adafruit_SGP40: For air quality sensing
  * - Wire: For I2C communication
  */
 
@@ -30,6 +31,7 @@
 #include "RP2040_PWM.h"   // PWM library
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_SGP40.h>
 #include <Wire.h>
 
 
@@ -40,6 +42,7 @@ TFT_eSprite uiSprite = TFT_eSprite(&tft);
 TFT_eSprite knob = TFT_eSprite(&tft);
 TFT_eSprite gauge1 = TFT_eSprite(&tft);
 TFT_eSprite gauge2 = TFT_eSprite(&tft);
+TFT_eSprite gauge3 = TFT_eSprite(&tft);
 TFT_eSprite gaugebg = TFT_eSprite(&tft);
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
 bool gaugesInitialized = false;
@@ -94,8 +97,9 @@ uint32_t currentColor = 0;
 #define I2C1_SDA 10  // Second I2C SDA pin
 #define I2C1_SCL 11  // Second I2C SCL pin
 
-// Environmental sensor
+// Environmental sensors
 Adafruit_BME280 bme;
+Adafruit_SGP40 sgp;
 unsigned long lastSensorUpdate = 0;
 const unsigned long SENSOR_UPDATE_INTERVAL = 2000; // 2 seconds
 
@@ -164,6 +168,10 @@ void cleanupSprites() {
     if (gauge2.created()) {
         gauge2.deleteSprite();
         Serial.println("Cleaned gauge2");
+    }
+    if (gauge3.created()) {
+        gauge3.deleteSprite();
+        Serial.println("Cleaned gauge3");
     }
     if (gaugebg.created()) {
         gaugebg.deleteSprite();
@@ -369,7 +377,10 @@ void setup() {
   tft.init();  
   tft.setRotation(0);  
 
-  // Calibrate the touch screen and display the initial screen
+  // Initialize the SGP40 air quality sensor
+  sgp.begin();
+
+  //Calibrate the touch screen and display the initial screen
   touch_calibrate();  
   displayScreen(currentScreen);  
 }
@@ -379,11 +390,11 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
-  // Handle temperature screen updates
+  // Handle temperature and air quality screen updates
   if (currentScreen == 3) {
     unsigned long currentMillis = millis();
     if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
-      updateTempDisplay();
+      updateTempAndAirQualityDisplay();
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
@@ -399,7 +410,7 @@ void loop(void) {
           lastButtonPress = currentTime + 250; // Add extra delay for button presses
           switch(b) {
             case 0: currentScreen = 7; break;  // Fans (moved from Settings)
-            case 1: currentScreen = 3; break;  // Temperature
+            case 1: currentScreen = 3; break;  // Temperature and Air Quality
             case 2: currentScreen = 5; break;  // Settings
           }
           displayScreen(currentScreen);  // Display the selected screen
@@ -630,7 +641,7 @@ void displayScreen(int screen) {  // Update screen display logic
       displayBGBrightness(); // Display Backlight Control screen
       break;
     case 3:
-      displayTemp();
+      displayTempAndAirQuality();
       break;
     case 4:
       displayFileExplorer();  // Display file explorer
@@ -649,7 +660,6 @@ void displayScreen(int screen) {  // Update screen display logic
       break;
   }
 }
-
 void drawMainMenu() {
   // Create menuSprite if it doesn't exist
   if (!menuSprite.created()) {
@@ -738,8 +748,37 @@ void displayBGBrightness() {
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
   slider1.setSliderPosition(dutyCycle);
 }
+void updateTempAndAirQualityDisplay() {
+  unsigned long currentMillis = millis();
+  lastSensorUpdate = currentMillis;
+  
+  // Only update if sprites are initialized
+  if (!gaugesInitialized) {
+    displayTempAndAirQuality();
+    return;
+  }
+   
+  float temp = bme.readTemperature();
+  float hum = bme.readHumidity();
+  
+  // Get VOC reading with temperature/humidity compensation
+  int32_t voc_index = sgp.measureVocIndex(temp, hum);
+  uint16_t voc_color = TFT_GREEN;
+  if (voc_index > 100) voc_color = TFT_YELLOW;
+  if (voc_index > 200) voc_color = TFT_ORANGE;
+  if (voc_index > 300) voc_color = TFT_RED;
+  
+  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
+  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge3, 70, 75, 0, 500, voc_index, "VOC", voc_color, 0x0011);
+  
+  // Push updated sprites to screen with VOC gauge on the right
+  gauge1.pushSprite(10, 40);
+  gauge2.pushSprite(10, 170);
+  gauge3.pushSprite(140, 105);
+}
 
-void displayTemp() {
+void displayTempAndAirQuality() {
   tft.fillScreen(TFT_BLACK);
   
   if (!backgroundDrawn) {
@@ -753,10 +792,15 @@ void displayTemp() {
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
-  // Only initialize BME280 once
+  // Only initialize BME280 and SGP40 once
   if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
+    return;
+  }
+  if (!sgp.begin()) {
+    tft.setCursor(10, 90);
+    tft.print("SGP40 not found!");
     return;
   }
 
@@ -770,6 +814,10 @@ void displayTemp() {
       gauge2.createSprite(140, 140);
       gauge2.setColorDepth(8);
     }
+    if (!gauge3.created()) {
+      gauge3.createSprite(140, 140);
+      gauge3.setColorDepth(8);
+    }
     gaugesInitialized = true;
   }
 
@@ -780,6 +828,9 @@ void displayTemp() {
   if (!gauge2.created()) {
     gauge2.createSprite(140, 140);
   }
+  if (!gauge3.created()) {
+    gauge3.createSprite(140, 140);
+  }
   if (!gaugebg.created()) {
     gaugebg.createSprite(240, 320);
     gaugebg.fillSprite(TFT_BLACK);
@@ -788,40 +839,21 @@ void displayTemp() {
 
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
+  int32_t voc_index = sgp.measureVocIndex(temp, hum);
+  uint16_t voc_color = TFT_GREEN;
+  if (voc_index > 100) voc_color = TFT_YELLOW;
+  if (voc_index > 200) voc_color = TFT_ORANGE;
+  if (voc_index > 300) voc_color = TFT_RED;
   
   // Draw to sprites instead of directly to screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
   drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Feuchte %", TFT_BLUE, 0x0011);
+  drawGaugeToSprite(&gauge3, 70, 75, 0, 500, voc_index, "VOC", voc_color, 0x0011);
   
-  // Push sprites to screen at centered positions
-  gauge1.pushSprite(45, 40);  // Adjusted Y position for temperature gauge
-  gauge2.pushSprite(45, 170); // Adjusted Y position for humidity gauge
-
-  // Draw back button
-  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
-  screenButton.drawButton();
-}
-
-void updateTempDisplay() {
-  unsigned long currentMillis = millis();
-  lastSensorUpdate = currentMillis;
-  
-  // Only update if sprites are initialized
-  if (!gaugesInitialized) {
-    displayTemp();
-    return;
-  }
-   
-  float temp = bme.readTemperature();
-  float hum = bme.readHumidity();
-  
-
-  drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
-  drawGaugeToSprite(&gauge2, 70, 75, 0, 100, hum, "Hum %", TFT_BLUE, 0x0011);
-  
-  // Push updated sprites to screen at the same positions as initial display
-  gauge1.pushSprite(45, 40);
-  gauge2.pushSprite(45, 170);
+  // Push sprites to screen with VOC gauge on the right
+  gauge1.pushSprite(10, 40);
+  gauge2.pushSprite(10, 170);
+  gauge3.pushSprite(140, 105);
 }
 
 void displayFileExplorer() {
