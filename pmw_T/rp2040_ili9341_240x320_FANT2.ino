@@ -526,27 +526,38 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   float scale = (sprite->width() == 98) ? 0.7 : 1.0;
   int outerRadius = round(62 * scale);
   int innerRadius = round(58 * scale);
+  bool isVOC = (sprite->width() == 98);
+  int fillRadius = round(54 * scale);
+  int centerRadius = round(35 * scale);
   
+  // Adjust fill radius for VOC gauge to ensure visibility
+  if (sprite->width() == 98) {
+    fillRadius = round(58 * scale);  // Increased fill radius for VOC
+    innerRadius = round(52 * scale); // Adjusted inner radius
+  }
+
   // Draw outer circle with anti-aliasing
   sprite->drawCircle(x, y, outerRadius, TFT_WHITE);
   for(int i = round(59 * scale); i >= round(58 * scale); i--) {
     sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
 
-  // Draw tick marks with improved precision
-  int radius = round(58 * scale);
-  for (int i = -225; i <= 45; i += 27) {
-    float rad = i * PI / 180.0;
-    int len = (i == -225 || i == 45 || i == -90) ? round(12 * scale) : round(8 * scale);
-    // Draw anti-aliased tick marks
-    for(int w = 0; w < 1; w++) {
-      sprite->drawLine(
-        x + cos(rad) * (radius-w), 
-        y + sin(rad) * (radius-w),
-        x + cos(rad) * (radius-len-w), 
-        y + sin(rad) * (radius-len-w),
-        (i == -225 || i == 45 || i == -90) ? TFT_WHITE : TFT_DARKGREY
-      );
+  // Draw tick marks only for non-VOC gauges
+  if (!isVOC) {
+    int radius = round(58 * scale);
+    for (int i = -225; i <= 45; i += 27) {
+      float rad = i * PI / 180.0;
+      int len = (i == -225 || i == 45 || i == -90) ? round(12 * scale) : round(8 * scale);
+      // Draw anti-aliased tick marks
+      for(int w = 0; w < 1; w++) {
+        sprite->drawLine(
+          x + cos(rad) * (radius-w), 
+          y + sin(rad) * (radius-w),
+          x + cos(rad) * (radius-len-w), 
+          y + sin(rad) * (radius-len-w),
+          (i == -225 || i == 45 || i == -90) ? TFT_WHITE : TFT_DARKGREY
+        );
+      }
     }
   }
 
@@ -556,8 +567,12 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   float endAngle = -225 + (mappedValue - min_val) * (270) / (max_val - min_val);
   endAngle = endAngle * PI / 180.0;
   
+  // Adjust fill radius for VOC gauge
+  int fillStart = isVOC ? round(58 * scale) : round(54 * scale);
+  int fillEnd = round(42 * scale);
+  
   // Draw filled arc with smoother gradient and anti-aliasing
-  for (int r = round(fillRadius * scale); r >= round(42 * scale); r--) {
+  for (int r = fillStart; r >= fillEnd; r--) {
     float stepSize = 0.01; // Smaller step size for smoother arc
     for (float angle = startAngle; angle <= endAngle; angle += stepSize) {
       float nextAngle = min(angle + stepSize, endAngle);
@@ -574,12 +589,12 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
     }
   }
 
-  // Draw inner circle
-  for(int r = 41; r >= 36; r--) {
-    uint8_t shadow = map(r, 38, 36, 46, 0);
+  // Draw inner circle with scaled dimensions
+  for(int r = round(41 * scale); r >= round(36 * scale); r--) {
+    uint8_t shadow = map(r, round(38 * scale), round(36 * scale), 46, 0);
     sprite->drawCircle(x, y, r, sprite->color565(shadow, shadow, shadow));
   }
-  sprite->fillCircle(x, y, 35, bgColor);
+  sprite->fillCircle(x, y, centerRadius, bgColor);
 
   // Draw labels and value
   char buf[10];
@@ -590,9 +605,9 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   }
   
   sprite->setTextColor(TFT_WHITE, bgColor);
-  // Adjust text size for VOC gauge
+  // Adjust text size and position for VOC gauge
   int textSize = (sprite->width() == 98) ? 2 : 4;
-  sprite->drawCentreString(buf, x, y-(16 * scale), textSize);
+  sprite->drawCentreString(buf, x, y-(round(16 * scale)), textSize);
   
   sprite->setTextSize(1);
   sprite->setTextColor(TFT_WHITE, bgColor);
@@ -832,9 +847,10 @@ void displayTempAndAirQuality() {
   drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
   
   // Push sprites to screen with VOC gauge on the right (pre-scaled)
-  gauge1.pushSprite(10, 40);
-  gauge2.pushSprite(10, 170);
-  gauge3.pushSprite(145, 110);
+  gauge1.pushSprite(7, 30);
+  gauge2.pushSprite(7, 160);
+  gauge3.pushSprite(142, 110);
+
 }
 
 void updateTempAndAirQualityDisplay() {
@@ -862,9 +878,9 @@ void updateTempAndAirQualityDisplay() {
   drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
   
   // Push updated sprites to screen with VOC gauge on the right (pre-scaled)
-  gauge1.pushSprite(10, 40);
-  gauge2.pushSprite(10, 170);
-  gauge3.pushSprite(145, 110);
+  gauge1.pushSprite(7, 30);
+  gauge2.pushSprite(7, 160);
+  gauge3.pushSprite(142, 110);
 }
 void displayFileExplorer() {
   // Don't clean up sprites here, let displayScreen handle it
