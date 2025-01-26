@@ -34,9 +34,6 @@
 #include <Adafruit_SGP40.h>
 #include <Wire.h>
 
-// Sensor status flags
-bool bme280_initialized = false;
-bool sgp40_initialized = false;
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -385,26 +382,8 @@ void setup() {
   tft.init();  
   tft.setRotation(0);  
 
-  // Initialize BME280
-  if (bme.begin(0x76, &Wire)) {
-    Serial.println("BME280 sensor found!");
-    bme280_initialized = true;
-  } else {
-    Serial.println("Could not find BME280 sensor!");
-    bme280_initialized = false;
-  }
-
-  // Initialize SGP40
-  if (sgp.begin()) {
-    Serial.println("SGP40 sensor found!");
-    sgp40_initialized = true;
-  } else {
-    Serial.println("Could not find SGP40 sensor!");
-    sgp40_initialized = false;
-  }
-
-  // Small delay to ensure stable sensor initialization
-  delay(100);
+  // Initialize the SGP40 air quality sensor
+  sgp.begin();
 
   //Calibrate the touch screen and display the initial screen
   touch_calibrate();  
@@ -822,17 +801,14 @@ void displayTempAndAirQuality() {
   screenButton.drawButton();
 
   // Only initialize BME280 and SGP40 once
-  if (!bme280_initialized) {
+  if (!bme.begin(0x76, &Wire)) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
-    delay(2000);  // Show error for 2 seconds
     return;
   }
-  
-  if (!sgp40_initialized) {
+  if (!sgp.begin()) {
     tft.setCursor(10, 90);
     tft.print("SGP40 not found!");
-    delay(2000);  // Show error for 2 seconds
     return;
   }
 
@@ -872,11 +848,10 @@ void displayTempAndAirQuality() {
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   int32_t voc_index = sgp.measureVocIndex(temp, hum);
-  uint16_t voc_color = TFT_DARKGREEN ;
-  if (voc_index > 100) voc_color = TFT_GREEN;
-  if (voc_index > 200) voc_color = TFT_YELLOW;
-  if (voc_index > 300) voc_color = TFT_ORANGE;
-  if (voc_index > 400) voc_color = TFT_RED;
+  uint16_t voc_color = TFT_GREEN;
+  if (voc_index > 100) voc_color = TFT_YELLOW;
+  if (voc_index > 200) voc_color = TFT_ORANGE;
+  if (voc_index > 300) voc_color = TFT_RED;
   
   // Draw to sprites instead of screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
@@ -1094,6 +1069,7 @@ void displayFanControl(uint8_t fanIndex) {
             }
             // Save all fan speeds after updating
             saveFanSpeeds(currentFanSpeeds);
+            
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
@@ -1110,6 +1086,13 @@ void displayFanControl(uint8_t fanIndex) {
           } else {
             // Original single fan update code
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
+        
+              int yOffset = i * 90;
+              tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+              tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+              tft.setTextColor(TFT_GREEN);
+              tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+              tft.setTextColor(TFT_WHITE);
             
             // Mark changes as pending and update timestamp
             fanChangesPending = true;
