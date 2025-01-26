@@ -52,6 +52,11 @@ bool backgroundDrawn = false;
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
 
+// Fan save delay mechanism
+unsigned long lastFanChange = 0;
+bool fanChangesPending = false;
+const unsigned long FAN_SAVE_DELAY = 2000;  // 2 second delay
+
 // Debounce control
 unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
@@ -389,6 +394,13 @@ void loop(void) {
   // Main loop to handle touch input and update screens
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
+
+  // Check if fan changes need to be saved
+  if (fanChangesPending && (millis() - lastFanChange >= FAN_SAVE_DELAY)) {
+    saveFanSpeeds(currentFanSpeeds);
+    fanChangesPending = false;
+    Serial.println("Saved fan settings after delay");
+  }
 
   // Handle temperature and air quality screen updates
   if (currentScreen == 3) {
@@ -1073,15 +1085,14 @@ void displayFanControl(uint8_t fanIndex) {
           } else {
             // Original single fan update code
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
-            int yOffset = i * 90;
-            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
-            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
-            tft.setTextColor(TFT_GREEN);
-            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
-            tft.setTextColor(TFT_WHITE);
             
-            // Save individual fan speed changes
-            saveFanSpeeds(currentFanSpeeds);
+            // Mark changes as pending and update timestamp
+            fanChangesPending = true;
+            lastFanChange = millis();
+            
+            // If we're exiting the screen, force save
+            if (screenButton.justPressed())
+              saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
