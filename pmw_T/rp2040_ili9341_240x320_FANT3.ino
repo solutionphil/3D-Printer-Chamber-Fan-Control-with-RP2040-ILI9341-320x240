@@ -34,6 +34,9 @@
 #include <Adafruit_SGP40.h>
 #include <Wire.h>
 
+// Sensor status flags
+bool bme280_initialized = false;
+bool sgp40_initialized = false;
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -51,6 +54,11 @@ bool backgroundDrawn = false;
 // PWM frequencies
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
+
+// Fan save delay mechanism
+unsigned long lastFanChange = 0;
+bool fanChangesPending = false;
+const unsigned long FAN_SAVE_DELAY = 2000;  // 2 second delay
 
 // Debounce control
 unsigned long lastButtonPress = 0;
@@ -377,8 +385,26 @@ void setup() {
   tft.init();  
   tft.setRotation(0);  
 
-  // Initialize the SGP40 air quality sensor
-  sgp.begin();
+  // Initialize BME280
+  if (bme.begin(0x76, &Wire)) {
+    Serial.println("BME280 sensor found!");
+    bme280_initialized = true;
+  } else {
+    Serial.println("Could not find BME280 sensor!");
+    bme280_initialized = false;
+  }
+
+  // Initialize SGP40
+  if (sgp.begin()) {
+    Serial.println("SGP40 sensor found!");
+    sgp40_initialized = true;
+  } else {
+    Serial.println("Could not find SGP40 sensor!");
+    sgp40_initialized = false;
+  }
+
+  // Small delay to ensure stable sensor initialization
+  delay(100);
 
   //Calibrate the touch screen and display the initial screen
   touch_calibrate();  
@@ -389,6 +415,13 @@ void loop(void) {
   // Main loop to handle touch input and update screens
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
+
+  // Check if fan changes need to be saved
+  if (fanChangesPending && (millis() - lastFanChange >= FAN_SAVE_DELAY)) {
+    saveFanSpeeds(currentFanSpeeds);
+    fanChangesPending = false;
+    Serial.println("Saved fan settings after delay");
+  }
 
   // Handle temperature and air quality screen updates
   if (currentScreen == 3) {
@@ -789,14 +822,17 @@ void displayTempAndAirQuality() {
   screenButton.drawButton();
 
   // Only initialize BME280 and SGP40 once
-  if (!bme.begin(0x76, &Wire)) {
+  if (!bme280_initialized) {
     tft.setCursor(10, 70);
     tft.print("BME280 not found!");
+    delay(2000);  // Show error for 2 seconds
     return;
   }
-  if (!sgp.begin()) {
+  
+  if (!sgp40_initialized) {
     tft.setCursor(10, 90);
     tft.print("SGP40 not found!");
+    delay(2000);  // Show error for 2 seconds
     return;
   }
 
@@ -836,10 +872,11 @@ void displayTempAndAirQuality() {
   float temp = bme.readTemperature();
   float hum = bme.readHumidity();
   int32_t voc_index = sgp.measureVocIndex(temp, hum);
-  uint16_t voc_color = TFT_GREEN;
-  if (voc_index > 100) voc_color = TFT_YELLOW;
-  if (voc_index > 200) voc_color = TFT_ORANGE;
-  if (voc_index > 300) voc_color = TFT_RED;
+  uint16_t voc_color = TFT_DARKGREEN ;
+  if (voc_index > 100) voc_color = TFT_GREEN;
+  if (voc_index > 200) voc_color = TFT_YELLOW;
+  if (voc_index > 300) voc_color = TFT_ORANGE;
+  if (voc_index > 400) voc_color = TFT_RED;
   
   // Draw to sprites instead of screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
@@ -1073,15 +1110,14 @@ void displayFanControl(uint8_t fanIndex) {
           } else {
             // Original single fan update code
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
-            int yOffset = i * 90;
-            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
-            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
-            tft.setTextColor(TFT_GREEN);
-            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
-            tft.setTextColor(TFT_WHITE);
             
-            // Save individual fan speed changes
-            saveFanSpeeds(currentFanSpeeds);
+            // Mark changes as pending and update timestamp
+            fanChangesPending = true;
+            lastFanChange = millis();
+            
+            // If we're exiting the screen, force save
+            if (screenButton.justPressed())
+              saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
