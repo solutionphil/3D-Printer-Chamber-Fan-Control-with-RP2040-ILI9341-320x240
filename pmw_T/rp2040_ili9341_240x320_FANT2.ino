@@ -850,8 +850,8 @@ void displayTempAndAirQuality() {
   gauge1.pushSprite(7, 30);
   gauge2.pushSprite(7, 160);
   gauge3.pushSprite(142, 110);
-
 }
+
 
 void updateTempAndAirQualityDisplay() {
   unsigned long currentMillis = millis();
