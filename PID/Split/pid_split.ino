@@ -212,6 +212,8 @@ void displayPID() {
     tft.setFreeFont(&FreeSansBold12pt7b);
     tft.setCursor(10, 30);
     tft.print("PID Control");
+        tft.setTextColor(TFT_WHITE);
+    tft.setFreeFont(LABEL2_FONT);
  
     // Draw current temperature
     tft.setFreeFont(&FreeSansBold12pt7b);
@@ -234,15 +236,15 @@ void displayPID() {
     tft.setCursor(20, 220);
     tft.print("PID: ");
     tft.setTextColor(PIDactive ? TFT_GREEN : TFT_RED);
-    tft.print(PIDactive ? "ON" : "OFF");
+    tft.print(PIDactive ? (char*)"ON" : (char*)"OFF");
 
     // Initialize buttons
-    upButton.initButton(&tft, 180, 140, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, "+", 1);
-    downButton.initButton(&tft, 180, 190, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, "-", 1);
+    upButton.initButton(&tft, 180, 140, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"+", 1);
+    downButton.initButton(&tft, 180, 190, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"-", 1);
     toggleButton.initButton(&tft, 120, 260, 160, 40, TFT_WHITE, 
                           PIDactive ? TFT_RED : TFT_GREEN, 
                           TFT_WHITE, 
-                          PIDactive ? "Turn OFF" : "Turn ON", 1);
+                          PIDactive ? (char*)"Turn OFF" : (char*)"Turn ON", 1);
 
     // Draw buttons
     upButton.drawButton();
@@ -484,7 +486,7 @@ void loop(void) {
             if (upButton.justPressed()) {
                 Setpoint = min(40.0, Setpoint + 0.5);
                 savePIDSettings();
-                updatePIDDisplay();
+                displayPID();
             }
             
             if (downButton.justPressed()) {
@@ -497,10 +499,10 @@ void loop(void) {
                 PIDactive = !PIDactive;
                 myPID.SetMode(PIDactive ? myPID.Control::automatic : myPID.Control::manual);
                 savePIDSettings();
-                displayPID(); // Redraw entire screen to update button states
+                 displayPID(); // Redraw entire screen to update button states
             }
         }
-        updatePIDDisplay(); // Update temperature display regularly
+        displayPID(); // Update temperature display regularly
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
