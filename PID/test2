@@ -49,11 +49,6 @@ TFT_eSprite menuSprite = TFT_eSprite(&tft);
 bool gaugesInitialized = false;
 bool backgroundDrawn = false;
 
-//Sensors
-  float temp;
-  float hum;
-  int32_t voc_index;
-
 // PWM frequencies
 float frequency = 1831;      // For brightness control
 float fanFrequency = 20000;  // Separate frequency for fans
@@ -68,6 +63,21 @@ unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 
 #define LED_STATE_FILE "/led_state.txt"
+
+// Sensor data structure
+struct SensorData {
+    float temperature;
+    float humidity;
+    int32_t vocIndex;
+    unsigned long lastUpdate;
+} sensorState;
+
+//Sensors
+  // Use sensor state values directly
+  float temp = sensorState.temperature;
+  float hum = sensorState.humidity;
+  int32_t voc_index = sensorState.vocIndex;
+
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
 const int totalScreens = 8;  // Increase total screens for info screen and fan control
@@ -412,20 +422,26 @@ void setup() {
   displayScreen(currentScreen);  
 
 }
+void updateSensors() {
+  unsigned long currentTime = millis();
+  if (currentTime - sensorState.lastUpdate >= SENSOR_UPDATE_INTERVAL) {
+    sensorState.temperature = bme.readTemperature();
+    sensorState.humidity = bme.readHumidity();
+    sensorState.vocIndex = sgp.measureVocIndex(sensorState.temperature, sensorState.humidity);
+    sensorState.lastUpdate = currentTime;
 
+  temp = sensorState.temperature;
+  hum = sensorState.humidity;
+  voc_index = sensorState.vocIndex;
+  }
+}
 void loop(void) {
   // Main loop to handle touch input and update screens
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
-unsigned long currentMillisSens = millis();
-    if (currentMillisSens - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL){
-
-  temp = bme.readTemperature();
-  Serial.print(temp);
-  hum = bme.readHumidity();
-  voc_index = sgp.measureVocIndex(temp, hum);
-}
+  // Update sensors in a non-blocking way
+  updateSensors();
 
   // Check if fan changes need to be saved
   if (fanChangesPending && (millis() - lastFanChange >= FAN_SAVE_DELAY)) {
@@ -962,11 +978,11 @@ void updateTempAndAirQualityDisplay() {
     return;
   }
    
-  float temp = bme.readTemperature();
-  float hum = bme.readHumidity();
+ // float temp = bme.readTemperature();
+  //float hum = bme.readHumidity();
   
   // Get VOC reading with temperature/humidity compensation
-  int32_t voc_index = sgp.measureVocIndex(temp, hum);
+ // int32_t voc_index = sgp.measureVocIndex(temp, hum);
   uint16_t voc_color = TFT_GREEN;
   if (voc_index > 100) voc_color = TFT_YELLOW;
   if (voc_index > 200) voc_color = TFT_ORANGE;
