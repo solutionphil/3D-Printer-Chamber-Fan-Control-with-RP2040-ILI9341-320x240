@@ -2,7 +2,7 @@
  * Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
- * Date: 01/27/2025
+ * Date: 01/21/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
@@ -506,16 +506,9 @@ void loop(void) {
       if (t_x >= 20 && t_x <= 70 && t_y >= 200 && t_y <= 250) {
         if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = millis();
-         if (PIDactive = !PIDactive)
-         {
-             myPID.SetMode(myPID.Control::automatic);
-          }
-          else
-          {
-            myPID.SetMode(myPID.Control::manual);
-          }
+          PIDactive = !PIDactive;
           savePIDSettings();
-          updatePIDDisplay();
+          displayPID();
         }
       }
       // Check Up button
@@ -524,7 +517,7 @@ void loop(void) {
           lastButtonPress = millis();
           Setpoint += 0.5;
           savePIDSettings();
-          updatePIDDisplay();
+          displayPID();
         }
       }
       // Check Down button
@@ -533,7 +526,7 @@ void loop(void) {
           lastButtonPress = millis();
           Setpoint -= 0.5;
           savePIDSettings();
-          updatePIDDisplay();
+          displayPID();
         }
       }
     }
@@ -858,170 +851,65 @@ void drawMainMenu() {
   menuSprite.pushSprite(0, 0);
 }
 
-//////
 void displayPID() {
 
  // Berechne PID-Output nur, wenn PID aktiv ist
   if (PIDactive==true) {
-  float gap = abs(Setpoint - temp); //distance away from setpoint
-  if (gap < 2) { //we're close to setpoint, use conservative tuning parameters
-    myPID.SetTunings(consKp, consKi, consKd);
-  } else {
-    //we're far from setpoint, use aggressive tuning parameters
-    myPID.SetTunings(aggKp, aggKi, aggKd);
-    myPID.Compute();
-   }
+  //turn the PID on
+   myPID.SetMode(myPID.Control::automatic);
+   //myPID.SetControllerDirection(REVERSE);
+   myPID.Compute();
    Fan_PWM[0]->setPWM(FAN1_PIN, fanFrequency, fanSpeed2);
    Fan_PWM[1]->setPWM(FAN2_PIN, fanFrequency, fanSpeed2);
    Fan_PWM[2]->setPWM(FAN3_PIN, fanFrequency, fanSpeed2);
   }
-  // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
+  else {
+    myPID.SetMode(myPID.Control::manual);
   }
-  
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
-  tft.setCursor(11, 31);
-  tft.print("PID Control");
+
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 20);
   tft.print("PID Control");
 
-   // Draw circular temperature gauge
-  int centerX = 120;
-  int centerY = 120;
-  int radius = 60;
-  
-  // Draw outer ring with gradient
-  for(int r = radius; r > radius-5; r--) {
-    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60°C
-    uint16_t gaugeColor = tft.color565(255 * tempRatio, 255 * (1-tempRatio), 0);
-    tft.drawCircle(centerX, centerY, r, gaugeColor);
-  }
-  
-  // Draw inner ring for target temperature
-  for(int r = radius-8; r > radius-12; r--) {
-    float targetRatio = (Setpoint - 20) / 40.0;
-    uint16_t targetColor = tft.color565(0, 255 * (1-targetRatio), 255 * targetRatio);
-    tft.drawCircle(centerX, centerY, r, targetColor);
-  }
+  // PID Active Toggle Button
+  tft.drawRect(20, 200, 50, 50, TFT_WHITE);
+  tft.fillRect(22, 202, 46, 46, PIDactive ? TFT_GREEN : TFT_RED);
+  tft.setCursor(27, 227);
+  tft.print(PIDactive ? "ON" : "OFF");
 
-  // Temperature display in center
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(centerX-30, centerY-10);
-  tft.printf("%.1f°C", temp);
-  tft.setFreeFont(&FreeSans9pt7b);
-  tft.setCursor(centerX-25, centerY+20);
-  tft.printf("/ %.1f°C", Setpoint);
+  // Setpoint Up/Down Buttons
+  tft.drawRect(170, 150, 60, 40, TFT_WHITE);
+  tft.fillRect(172, 152, 56, 36, TFT_BLUE);
+  tft.setCursor(184, 165);
+  tft.print("+");
 
-  // Modern toggle switch for PID
-  int toggleX = 30;
-  int toggleY = 280;
-  tft.fillRoundRect(toggleX, toggleY, 60, 30, 15, PIDactive ? TFT_GREEN : TFT_DARKGREY);
-  tft.fillCircle(toggleX + (PIDactive ? 45 : 15), toggleY + 15, 12, TFT_WHITE);
-  
-  // Stylish up/down buttons
-  drawRoundButton(190, 200, 40, 40, "+", TFT_BLUE);
-  drawRoundButton(190, 260, 40, 40, "-", TFT_BLUE);
-  
-  // PID terms visualization
-  int barX = 20;
-  int barY = 195;
-  drawPIDBar(barX, barY, "P", myPID.GetPterm(), TFT_RED);
-  drawPIDBar(barX, barY + 25, "I", myPID.GetIterm(), TFT_GREEN);
-  drawPIDBar(barX, barY + 50, "D", myPID.GetDterm(), TFT_BLUE);
+  tft.drawRect(170, 220, 60, 40, TFT_WHITE);
+  tft.fillRect(172, 222, 56, 36, TFT_BLUE);
+  tft.setCursor(184, 235);
+  tft.print("-");
+
+  // Display current temperature and setpoint
+  tft.setCursor(20, 60);
+  tft.printf("Duty: ", fanSpeed2);
+  tft.setCursor(20, 80);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 100);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
 
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
   // Anzeige aktualisieren
-  updatePIDDisplay();
-}
-
-// Helper function to draw rounded buttons
-void drawRoundButton(int x, int y, int w, int h, const char* label, uint16_t color) {
-  tft.fillRoundRect(x, y, w, h, 10, color);
-  tft.drawRoundRect(x, y, w, h, 10, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(x + w/2 - 5, y + h/2 + 5);
-  tft.print(label);
-}
-
-// Helper function to draw PID term bars
-void drawPIDBar(int x, int y, const char* term, float value, uint16_t color) {
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(&FreeSans9pt7b);
-  tft.setCursor(x, y+15);
-  tft.print(term);
-  int barWidth = constrain(abs(value) * 20, 0, 100);
-  tft.fillRect(x+20, y, barWidth, 20, color);
-  tft.drawRect(x+20, y, 100, 20, TFT_DARKGREY);
+  updatePIDDisplay;
 }
 
 void updatePIDDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
-
-  int centerX = 120;
-  int centerY = 120;
-  int radius = 60;
-  
-  // Draw outer ring with gradient
-  for(int r = radius; r > radius-5; r--) {
-    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60°C
-    uint16_t gaugeColor = tft.color565(255 * tempRatio, 255 * (1-tempRatio), 0);
-    tft.drawCircle(centerX, centerY, r, gaugeColor);
-  }
-  
-  // Draw inner ring for target temperature
-  for(int r = radius-8; r > radius-12; r--) {
-    float targetRatio = (Setpoint - 20) / 40.0;
-    uint16_t targetColor = tft.color565(0, 255 * (1-targetRatio), 255 * targetRatio);
-    tft.drawCircle(centerX, centerY, r, targetColor);
-  }
-
-  // Temperature display in center
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(centerX-30, centerY-10);
-  tft.printf("%.1f°C", temp);
-  tft.setFreeFont(&FreeSans9pt7b);
-  tft.setCursor(centerX-25, centerY+20);
-  tft.printf("/ %.1f°C", Setpoint);
-
-  // Modern toggle switch for PID
-  int toggleX = 30;
-  int toggleY = 280;
-  tft.fillRoundRect(toggleX, toggleY, 60, 30, 15, PIDactive ? TFT_GREEN : TFT_DARKGREY);
-  tft.fillCircle(toggleX + (PIDactive ? 45 : 15), toggleY + 15, 12, TFT_WHITE);
-  
- 
-  // PID terms visualization
-  int barX = 20;
-  int barY = 195;
-  drawPIDBar(barX, barY, "P", myPID.GetPterm(), TFT_RED);
-  drawPIDBar(barX, barY + 25, "I", myPID.GetIterm(), TFT_GREEN);
-  drawPIDBar(barX, barY + 50, "D", myPID.GetDterm(), TFT_BLUE);
-
-
-  if (PIDactive==true) {
-  float gap = abs(Setpoint - temp); //distance away from setpoint
-  if (gap < 2) { //we're close to setpoint, use conservative tuning parameters
-    myPID.SetTunings(consKp, consKi, consKd);
-  } else {
-    //we're far from setpoint, use aggressive tuning parameters
-    myPID.SetTunings(aggKp, aggKi, aggKd);
-    myPID.Compute();
-   }
-  }
-
-   Serial.println();
+  Serial.println();
   Serial.print(F(" Setpoint: "));  Serial.println(Setpoint);
   Serial.print(F(" Input:    "));  Serial.println(temp);
   Serial.print(F(" Output:   "));  Serial.println(fanSpeed2);
@@ -1033,32 +921,51 @@ void updatePIDDisplay() {
   Serial.print(F(" Pmode:    "));  Serial.println(myPID.GetPmode());
   Serial.print(F(" Dmode:    "));  Serial.println(myPID.GetDmode());
   Serial.print(F(" AwMode:   "));  Serial.println(myPID.GetAwMode());
+
+  tft.fillRect(80, 60,  95,  20, TFT_BLACK);
+  tft.fillRect(120, 80,  95,  20, TFT_BLACK);
+  tft.fillRect(130, 100,  100,  20, TFT_BLACK);
+  tft.setCursor(20, 60);
+  tft.printf("Duty: ", fanSpeed2);
+  tft.setCursor(20, 80);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 100);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
+  
+  if (PIDactive==true) {
+  float gap = abs(Setpoint - temp); //distance away from setpoint
+  if (gap < 2) { //we're close to setpoint, use conservative tuning parameters
+    myPID.SetTunings(consKp, consKi, consKd);
+  } else {
+    //we're far from setpoint, use aggressive tuning parameters
+    myPID.SetTunings(aggKp, aggKi, aggKd);
+    myPID.Compute();
+   Fan_PWM[0]->setPWM(FAN1_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[1]->setPWM(FAN2_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[2]->setPWM(FAN3_PIN, fanFrequency, fanSpeed2);
+   }
+  }else {
+    myPID.SetMode(myPID.Control::manual);
+  }
 }
 
 void displayBGBrightness() {
   // Clear screen and set up title
   tft.fillScreen(TFT_BLACK);
   
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+  
   // Ensure knob sprite is ready
   if (!knob.created()) knob.createSprite(30, 40);
   
-// Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
-  }
- 
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
-  tft.print("Brightness");
-
+  tft.setTextColor(TFT_CYAN);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(0);
+  tft.drawString("Brightness", 30, 50);
 
   // Update percentage display
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
   tft.setTextColor(TFT_GREEN);
   tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
@@ -1093,12 +1000,6 @@ void displayBGBrightness() {
   slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
   slider1.setSliderPosition(dutyCycle);
-    // Draw back button
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
-  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
-  screenButton.drawButton();
-
 }
 void displayTempAndAirQuality() {
   tft.fillScreen(TFT_BLACK);
@@ -1109,23 +1010,10 @@ void displayTempAndAirQuality() {
     tft.setTextSize(1);
     backgroundDrawn = true;
   }
-  // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
-  }
-  
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
-  tft.setCursor(11, 31);
-  tft.print("AQI");
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
-  tft.print("AQI");
-  tft.setFreeFont(LABEL2_FONT);
-  tft.setTextSize(1);
 
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
 
   // Initialize sprites only once
   if (!gaugesInitialized) {
@@ -1176,9 +1064,9 @@ void displayTempAndAirQuality() {
   drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
   
   // Push sprites to screen with VOC gauge on the right (pre-scaled)
-  gauge1.pushSprite(7, 45);
-  gauge2.pushSprite(7, 175);
-  gauge3.pushSprite(142, 125);
+  gauge1.pushSprite(7, 30);
+  gauge2.pushSprite(7, 160);
+  gauge3.pushSprite(142, 110);
 }
 
 
@@ -1207,9 +1095,9 @@ void updateTempAndAirQualityDisplay() {
   drawGaugeToSprite(&gauge3, 49, 52, 0, 500, voc_index, "VOC", voc_color, 0x0011); // Adjusted center coordinates for smaller gauge
   
   // Push updated sprites to screen with VOC gauge on the right (pre-scaled)
-  gauge1.pushSprite(7, 45);
-  gauge2.pushSprite(7, 175);
-  gauge3.pushSprite(142, 125);
+  gauge1.pushSprite(7, 30);
+  gauge2.pushSprite(7, 160);
+  gauge3.pushSprite(142, 110);
 }
 void displayFileExplorer() {
   // Don't clean up sprites here, let displayScreen handle it
@@ -1220,19 +1108,11 @@ void displayFileExplorer() {
     menuSprite.createSprite(240, 320);
   }
   
-  // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
-  }
-  
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 20);
   tft.print("File Explorer");
-
   tft.setFreeFont(LABEL2_FONT);
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
@@ -1253,24 +1133,10 @@ void displayFileExplorer() {
 void displaySettings() {
   menuSprite.fillSprite(TFT_BLACK);
   menuSprite.setTextColor(TFT_WHITE);
-   
-    // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = menuSprite.color565(0, i * 2, i * 4);
-    menuSprite.drawFastHLine(0, i, 240, gradientColor);
-  }
-  
-  // Title with shadow effect
-  menuSprite.setTextColor(TFT_DARKGREY);
-  menuSprite.setFreeFont(&FreeSansBold12pt7b);
-  menuSprite.setCursor(11, 31);
-  menuSprite.print("Settings");
-  menuSprite.setTextColor(TFT_WHITE);
-  menuSprite.setCursor(10, 30);
-  menuSprite.print("Settings");
   menuSprite.setFreeFont(LABEL2_FONT);
   menuSprite.setTextSize(1);
-
+  menuSprite.setCursor(10, 50);
+  menuSprite.print("Settings");
 
   // Initialize settings menu buttons
   for (int i = 0; i < 4; i++) {  // Changed to 4 for removed "Fans" button
@@ -1283,25 +1149,10 @@ void displaySettings() {
 
 void displayLEDControl() {
   bool currentState = neopixelState; // Store current state to detect changes
-  tft.fillScreen(TFT_DARKGREY);
-  // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
-  }
-  
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
-  tft.setCursor(11, 31);
-  tft.print("RP2040 LED");
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
-  tft.print("RP2040 LED");
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(1);
-  tft.setFreeFont(LABEL2_FONT);
+  tft.fillScreen(TFT_BLACK);
 
+  tft.setTextColor(TFT_WHITE);
+  
   // Draw LED status
   tft.drawString("Status:", 30, 100);
   tft.setTextColor(currentState ? TFT_GREEN : TFT_RED);
@@ -1613,27 +1464,18 @@ void touch_calibrate() {
 
 void displayInfoScreen() {
   tft.fillScreen(TFT_BLACK);
-    // Create title bar with gradient
-  for(int i = 0; i < 40; i++) {
-    uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-    tft.drawFastHLine(0, i, 240, gradientColor);
-  }
-  
-  // Title with shadow effect
-  tft.setTextColor(TFT_DARKGREY);
-  tft.setFreeFont(&FreeSansBold12pt7b);
-  tft.setCursor(11, 31);
-  tft.print("System Info");
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10, 30);
-  tft.print("System Info");
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   
   // Draw back button that returns to Settings
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
+
+  // Rest of header
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setCursor(10, 20);
+  tft.print("System Info");
+  tft.setFreeFont(LABEL2_FONT);
 
    // Display CPU frequency
   tft.setTextColor(TFT_WHITE);
