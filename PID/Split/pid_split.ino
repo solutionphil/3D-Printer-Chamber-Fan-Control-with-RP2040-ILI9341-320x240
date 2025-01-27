@@ -56,6 +56,7 @@ TFT_eSprite gauge2 = TFT_eSprite(&tft);
 TFT_eSprite gauge3 = TFT_eSprite(&tft);
 TFT_eSprite gaugebg = TFT_eSprite(&tft);
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
+TFT_eSprite pidBars = TFT_eSprite(&tft);  // Add PID visualization sprite
 bool gaugesInitialized = false;
 bool backgroundDrawn = false;
 
