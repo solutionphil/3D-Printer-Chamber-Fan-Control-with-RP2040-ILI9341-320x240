@@ -82,9 +82,9 @@ void displayPID() {
   tft.print("PID Control");
 
   // Draw circular temperature gauge
-  int centerX = 120;
-  int centerY = 100;  // Moved up 20px
-  int radius = 60;
+  int centerX = PID_CENTER_X;
+  int centerY = PID_CENTER_Y;
+  int radius = PID_RADIUS;
 
   // Draw outer ring with gradient
   for(int r = radius; r > radius-5; r--) {
@@ -103,10 +103,10 @@ void displayPID() {
   // Temperature display in center
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(centerX-30, centerY-10);
+  tft.setCursor(PID_CENTER_X-30, PID_CENTER_Y-10);
   tft.printf("%.1f°C", temp);
   tft.setFreeFont(&FreeSans9pt7b);
-  tft.setCursor(centerX-25, centerY+20);
+  tft.setCursor(PID_CENTER_X-25, PID_CENTER_Y+20);
   tft.printf("/ %.1f°C", Setpoint);
 
   // Initialize PID toggle button
@@ -122,12 +122,12 @@ void displayPID() {
   tempDown.drawButton();
 
   // PID terms visualization
-  int barX = 20;
-  int barY = 195;
+  int barX = PID_BAR_X;
+  int barY = PID_BAR_Y;
   drawPIDBarToSprite(&pidBars, barX, barY, "P", myPID.GetPterm(), TFT_RED);
-  drawPIDBarToSprite(&pidBars, barX, barY + 25, "I", myPID.GetIterm(), TFT_GREEN);
-  drawPIDBarToSprite(&pidBars, barX, barY + 50, "D", myPID.GetDterm(), TFT_BLUE);
-  pidBars.pushSprite(0, 195);
+  drawPIDBarToSprite(&pidBars, barX, barY + PID_BAR_SPACING, "I", myPID.GetIterm(), TFT_GREEN);
+  drawPIDBarToSprite(&pidBars, barX, barY + PID_BAR_SPACING * 2, "D", myPID.GetDterm(), TFT_BLUE);
+  pidBars.pushSprite(0, PID_BAR_Y);
 
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
@@ -153,7 +153,7 @@ void drawPIDBarToSprite(TFT_eSprite* sprite, int x, int y, const char* term, flo
 // Keep the original function for compatibility
 void drawPIDBar(int x, int y, const char* term, float value, uint16_t color) {
   drawPIDBarToSprite(&pidBars, x, y, term, value, color);
-  pidBars.pushSprite(0, 195);
+  pidBars.pushSprite(0, PID_BAR_Y);
 }
 
 void updatePIDState() {
@@ -176,39 +176,38 @@ void updatePIDState() {
 }
 
 void updatePIDDisplay() {
-    unsigned long currentMillis = millis();
-    lastSensorUpdate = currentMillis;
-
+    if (millis() - lastSensorUpdate < SENSOR_UPDATE_INTERVAL) return;
+    
+    lastSensorUpdate = millis();
     updatePIDState();
     
-    int centerX = 120;
-    int centerY = 120;
-    int radius = 60;
-
-    drawTemperatureGauge(centerX, centerY, radius);
-
-  // Draw inner ring for target temperature
-  for(int r = radius-8; r > radius-12; r--) {
-    float targetRatio = (Setpoint - 20) / 40.0;
-    uint16_t targetColor = tft.color565(0, 255 * (1-targetRatio), 255 * targetRatio);
-    tft.drawCircle(centerX, centerY, r, targetColor);
-  }
+    // Update temperature gauge
+    if (gauge1.created()) {
+        drawGaugeToSprite(&gauge1, 70, 70, 20, 60, temp, "Temp °C", TFT_RED, TFT_BLACK);
+        gauge1.pushSprite(0, 45);
+    }
+    
+    // Update fan speed gauge
+    if (gauge2.created()) {
+        drawGaugeToSprite(&gauge2, 70, 70, 0, 100, fanSpeed2, "Fan %", TFT_BLUE, TFT_BLACK);
+        gauge2.pushSprite(120, 45);
+    }
 
   // Temperature display in center
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(centerX-30, centerY-10);
+  tft.setCursor(PID_CENTER_X-30, PID_CENTER_Y-10);
   tft.printf("%.1f°C", temp);
   tft.setFreeFont(&FreeSans9pt7b);
-  tft.setCursor(centerX-25, centerY+20);
+  tft.setCursor(PID_CENTER_X-25, PID_CENTER_Y+20);
   tft.printf("/ %.1f°C", Setpoint);
 
   // PID terms visualization
-  int barX = 20;
-  int barY = 195;
+  int barX = PID_BAR_X;
+  int barY = PID_BAR_Y;
   drawPIDBar(barX, barY, "P", myPID.GetPterm(), TFT_RED);
-  drawPIDBar(barX, barY + 25, "I", myPID.GetIterm(), TFT_GREEN);
-  drawPIDBar(barX, barY + 50, "D", myPID.GetDterm(), TFT_BLUE);
+  drawPIDBar(barX, barY + PID_BAR_SPACING, "I", myPID.GetIterm(), TFT_GREEN);
+  drawPIDBar(barX, barY + PID_BAR_SPACING * 2, "D", myPID.GetDterm(), TFT_BLUE);
 
   if (PIDactive==true) {
     float gap = abs(Setpoint - temp); //distance away from setpoint
