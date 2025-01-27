@@ -41,10 +41,6 @@ float Setpoint = 25.0;
 bool PIDactive = false;
 #define PID_SETTINGS_FILE "/pid_settings.txt"
 
-// PID Control Buttons
-TFT_eSPI_Button pidToggle;
-TFT_eSPI_Button tempUp;
-TFT_eSPI_Button tempDown;
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -56,7 +52,7 @@ TFT_eSprite gauge2 = TFT_eSprite(&tft);
 TFT_eSprite gauge3 = TFT_eSprite(&tft);
 TFT_eSprite gaugebg = TFT_eSprite(&tft);
 TFT_eSprite menuSprite = TFT_eSprite(&tft);
-TFT_eSprite pidBars = TFT_eSprite(&tft);  // Add PID visualization sprite
+
 bool gaugesInitialized = false;
 bool backgroundDrawn = false;
 
@@ -394,42 +390,6 @@ void loop(void) {
     unsigned long currentMillis = millis();
     if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
       updateTempAndAirQualityDisplay();
-  }
-    // Handle temperature and air quality screen updates
-    if (currentScreen == 1) {
-      unsigned long currentMillis = millis();
-      if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
-        updatePIDDisplay();
-        
-      // Handle PID control button presses
-      if (pressed) {
-        if (pidToggle.contains(t_x, t_y)) {
-        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
-          lastButtonPress = millis();
-          PIDactive = !PIDactive;
-          myPID.SetMode(PIDactive ? myPID.Control::automatic : myPID.Control::manual);
-          savePIDSettings();
-          updatePIDDisplay();
-        }
-      }
-      // Check temperature control buttons
-      else if (tempUp.contains(t_x, t_y)) {
-        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
-          lastButtonPress = millis();
-          Setpoint = constrain(Setpoint + 0.5, 20.0, 40.0);
-          savePIDSettings();
-          updatePIDDisplay();
-        }
-      }
-      else if (tempDown.contains(t_x, t_y)) {
-        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
-          lastButtonPress = millis();
-          Setpoint = constrain(Setpoint - 0.5, 20.0, 40.0);
-          savePIDSettings();
-          updatePIDDisplay();
-        }
-      }
-    }
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
