@@ -199,61 +199,72 @@ struct PIDDisplayState {
 TFT_eSPI_Button upButton, downButton, toggleButton;
 
 void displayPID() {
-    tft.fillScreen(TFT_BLACK);
- 
-    // Create title bar with gradient
+    // Create sprite for more efficient rendering
+    TFT_eSprite pidSprite = TFT_eSprite(&tft);
+    pidSprite.createSprite(240, 320);
+    pidSprite.fillSprite(TFT_BLACK);
+
+    // Gradient title bar
     for(int i = 0; i < 40; i++) {
-        uint16_t gradientColor = tft.color565(0, i * 2, i * 4);
-        tft.drawFastHLine(0, i, 240, gradientColor);
+        uint16_t gradientColor = pidSprite.color565(0, i * 2, i * 4);
+        pidSprite.drawFastHLine(0, i, 240, gradientColor);
     }
 
-    // Draw title
-    tft.setTextColor(TFT_WHITE);
-    tft.setFreeFont(&FreeSansBold12pt7b);
-    tft.setCursor(10, 30);
-    tft.print("PID Control");
-        tft.setTextColor(TFT_WHITE);
-    tft.setFreeFont(LABEL2_FONT);
- 
-    // Draw current temperature
-    tft.setFreeFont(&FreeSansBold12pt7b);
-    tft.setCursor(20, 100);
-    tft.print("Temp: ");
-    tft.setTextColor(TFT_GREEN);
-    tft.print(temp, 1);
-    tft.print(" C");
+    // Title
+    pidSprite.setTextColor(TFT_WHITE);
+    pidSprite.setFreeFont(&FreeSansBold12pt7b);
+    pidSprite.setCursor(10, 30);
+    pidSprite.print("PID Control");
 
-    // Draw setpoint control
-    tft.setTextColor(TFT_WHITE);
-    tft.setCursor(20, 160);
-    tft.print("Setpoint: ");
-    tft.setTextColor(TFT_CYAN);
-    tft.print(Setpoint, 1);
-    tft.print(" C");
+    // Temperature gauge
+    drawPIDGauge(&pidSprite, 20, 80, temp, "Current", TFT_GREEN);
+    drawPIDGauge(&pidSprite, 130, 80, Setpoint, "Setpoint", TFT_CYAN);
 
-    // Draw PID status
-    tft.setTextColor(TFT_WHITE);
-    tft.setCursor(20, 220);
-    tft.print("PID: ");
-    tft.setTextColor(PIDactive ? TFT_GREEN : TFT_RED);
-    tft.print(PIDactive ? (char*)"ON" : (char*)"OFF");
+    // PID Status and Control Details
+    pidSprite.setFreeFont(LABEL2_FONT);
+    pidSprite.setTextColor(TFT_WHITE);
+    pidSprite.setCursor(20, 220);
+    pidSprite.print("Status: ");
+    pidSprite.setTextColor(PIDactive ? TFT_GREEN : TFT_RED);
+    pidSprite.print(PIDactive ? (char*)"Active" : (char*)"Inactive");
 
-    // Initialize buttons
-    upButton.initButton(&tft, 180, 140, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"+", 1);
-    downButton.initButton(&tft, 180, 190, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"-", 1);
-    toggleButton.initButton(&tft, 120, 260, 160, 40, TFT_WHITE, 
-                          PIDactive ? TFT_RED : TFT_GREEN, 
-                          TFT_WHITE, 
-                          PIDactive ? (char*)"Turn OFF" : (char*)"Turn ON", 1);
+    // PID Tuning Parameters
+    pidSprite.setTextColor(TFT_WHITE);
+    pidSprite.setCursor(20, 250);
+    pidSprite.printf("P: %.2f  I: %.2f  D: %.2f", 
+                     myPID.GetKp(), myPID.GetKi(), myPID.GetKd());
 
-    // Draw buttons
+    // Initialize and draw buttons
+    upButton.initButton(&pidSprite, 180, 140, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"+", 1);
+    downButton.initButton(&pidSprite, 180, 190, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"-", 1);
+    toggleButton.initButton(&pidSprite, 120, 260, 160, 40, TFT_WHITE, 
+                            PIDactive ? TFT_RED : TFT_GREEN, 
+                            TFT_WHITE, 
+                            PIDactive ? (char*)"Turn OFF" : (char*)"Turn ON", 1);
+
     upButton.drawButton();
     downButton.drawButton();
     toggleButton.drawButton();
 
-    // Draw back button
-    screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+    screenButton.initButton(&pidSprite, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
     screenButton.drawButton();
+
+    // Push sprite to screen
+    pidSprite.pushSprite(0, 0);
+    pidSprite.deleteSprite();
+}
+
+// New helper function for drawing PID gauges
+void drawPIDGauge(TFT_eSprite* sprite, int x, int y, float value, const char* label, uint16_t color) {
+    sprite->fillCircle(x + 40, y + 40, 40, color);
+    sprite->drawCircle(x + 40, y + 40, 40, TFT_WHITE);
+    sprite->setTextColor(TFT_BLACK);
+    sprite->setFreeFont(&FreeSansBold12pt7b);
+    sprite->setCursor(x + 20, y + 50);
+    sprite->printf("%.1f", value);
+    sprite->setTextColor(TFT_WHITE);
+    sprite->setCursor(x + 10, y + 80);
+    sprite->print(label);
 }
 
 void updatePIDDisplay() {
@@ -341,7 +352,7 @@ void setNeoPixelColor(int screenNumber) {
       pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
       break;
     case 8: // System Info
-      pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Cyan
+      pixels.setPixelColor(0, pixels.Color(0, 255, 255));
       break;
   }
   pixels.show();
