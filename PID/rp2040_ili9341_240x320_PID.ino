@@ -22,32 +22,29 @@
  * - Adafruit_BME280: For environmental sensing
  * - Adafruit_SGP40: For air quality sensing
  * - Wire: For I2C communication
- * - QuickPID: For PID control
  */
-#include <Adafruit_NeoPixel.h>
-#include <QuickPID.h>     // Add QuickPID library
-#include <Adafruit_BME280.h>
+
 #include <LittleFS.h>
-#include <Adafruit_SGP40.h>
-#include <Wire.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>      // Hardware-specific library
 #include <TFT_eWidget.h>  // Widget library for sliders
 #include "RP2040_PWM.h"   // PWM library
+#include <Adafruit_NeoPixel.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_SGP40.h>
+#include <Wire.h>
+#include <QuickPID.h>
 
-// Sensor status flags
-bool bme280_initialized = false;
-bool sgp40_initialized = false;
-
+// PID Control Variables
+float Setpoint = 25.0;
+bool PIDactive = false;
 #define PID_SETTINGS_FILE "/pid_settings.txt"
+
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 // Create single shared sprite for all UI elements
 TFT_eSprite uiSprite = TFT_eSprite(&tft);
 TFT_eSprite knob = TFT_eSprite(&tft);
-TFT_eSprite pidSprite = TFT_eSprite(&tft);
-TFT_eSprite tempSprite = TFT_eSprite(&tft);
-TFT_eSprite controlSprite = TFT_eSprite(&tft);
 TFT_eSprite gauge1 = TFT_eSprite(&tft);
 TFT_eSprite gauge2 = TFT_eSprite(&tft);
 TFT_eSprite gauge3 = TFT_eSprite(&tft);
@@ -70,6 +67,30 @@ unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
 
 #define LED_STATE_FILE "/led_state.txt"
+
+// Sensor data structure
+struct SensorData {
+    float temperature;
+    float humidity;
+    int32_t vocIndex;
+    unsigned long lastUpdate;
+} sensorState;
+
+//Sensors
+  // Use sensor state values directly
+  float temp = sensorState.temperature;
+  float hum = sensorState.humidity;
+  int32_t voc_index = sensorState.vocIndex;
+
+//Define the aggressive and conservative and POn Tuning Parameters
+float aggKp = 4, aggKi = 0.2, aggKd = 1;
+float consKp = 1, consKi = 0.05, consKd = 0.25;
+
+float fanSpeed2=30;
+//Specify the links
+QuickPID myPID(&temp, &fanSpeed2, &Setpoint);
+
+
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
 const int totalScreens = 8;  // Increase total screens for info screen and fan control
@@ -84,10 +105,6 @@ char backButtonLabel[] = "Back";
 char yesLabel[] = "Yes";
 char noLabel[] = "No";
 char backLabel[] = "Back";
-char plusLabel[] = "+";
-char minusLabel[] = "-";
-char pidEnableLabel[] = "Enable PID";
-char pidDisableLabel[] = "Disable PID";
 
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
@@ -140,20 +157,6 @@ RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
 float dutyCycle; //= 90;  // Default brightness value
-
-// PID Control variables
-float pidSetpoint = 25.0f;    // Target temperature
-float pidInput;              // Current temperature
-float pidOutput;             // PID output (0-100 for fan speed)
-bool pidEnabled = false;      // PID control enabled flag
-
-// PID parameters
-float Kp = 2.0f;
-float Ki = 5.0f;
-float Kd = 1.0f;
-
-// Initialize PID
-QuickPID myPID(&pidInput, &pidOutput, &pidSetpoint);
 
 // PWM Fan Control
 #define FAN1_PIN 27
@@ -302,6 +305,29 @@ void loadFanSpeeds(float speeds[3]) {
   }
 }
 
+void savePIDSettings() {
+  File f = LittleFS.open(PID_SETTINGS_FILE, "w");
+  if (f) {
+    f.println(Setpoint);
+    f.println(PIDactive ? "1" : "0");
+    f.close();
+  }
+}
+
+void loadPIDSettings() {
+  if (LittleFS.exists(PID_SETTINGS_FILE)) {
+    File f = LittleFS.open(PID_SETTINGS_FILE, "r");
+    if (f) {
+      String setpoint = f.readStringUntil('\n');
+      String active = f.readStringUntil('\n');
+      Setpoint = setpoint.toFloat();
+      active.trim();  // Trim the string first
+      PIDactive = (active == "1");  // Then compare
+      f.close();
+    }
+  }
+}
+
 void setNeoPixelColor(int screenNumber) {
   if (!neopixelState) return; // Don't change colors if LED is off
 
@@ -309,7 +335,7 @@ void setNeoPixelColor(int screenNumber) {
     case 0: // Main Menu
       pixels.setPixelColor(0, pixels.Color(0, 0, 255)); // Blue
       break;
-    case 1: // PID
+    case 1: // Screen 1
       pixels.setPixelColor(0, pixels.Color(255, 0, 0)); // Red
       break;
     case 2: // Brightness Screen
@@ -341,7 +367,8 @@ void setup() {
 
   // Initialize serial communication for debugging
   Serial.begin(9600);  
-  // Initialize I2C0
+
+    // Initialize I2C0
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
   Wire.begin();
@@ -352,6 +379,18 @@ void setup() {
   Wire1.setSDA(I2C1_SDA);
   Wire1.setSCL(I2C1_SCL);
   Wire1.begin();
+
+    // Only initialize BME280 and SGP40 once
+  if (!bme.begin(0x76, &Wire)) {
+    tft.setCursor(10, 70);
+    Serial.print("BME280 not found!");
+    return;
+  }
+  if (!sgp.begin()) {
+    tft.setCursor(10, 90);
+    Serial.print("SGP40 not found!");
+    return;
+  }
 
   // Initialize menu sprite
   menuSprite.createSprite(240, 320);
@@ -395,16 +434,12 @@ void setup() {
   for (int i = 0; i < 3; i++) {
     Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, fanFrequency, 0);
   }
-  
-  // Initialize PID controller
-  myPID.SetTunings(Kp, Ki, Kd);
+
+  //turn the PID on
   myPID.SetMode(myPID.Control::manual);
-  myPID.SetOutputLimits(0, 100);
-  myPID.SetSampleTimeUs(100000); // 100ms update rate
-  
-  // Load PID settings from LittleFS
-  loadPIDSettings();
-  
+  myPID.SetControllerDirection(myPID.Action::reverse);
+  myPID.SetOutputLimits(30, 100);
+
   // Load saved fan speeds
   float fanSpeeds[3] = {0, 0, 0};
   loadFanSpeeds(fanSpeeds);
@@ -417,36 +452,34 @@ void setup() {
   tft.init();  
   tft.setRotation(0);  
 
-  // Initialize BME280
-  if (bme.begin(0x76, &Wire)) {
-    Serial.println("BME280 sensor found!");
-    bme280_initialized = true;
-  } else {
-    Serial.println("Could not find BME280 sensor!");
-    bme280_initialized = false;
-  }
-
-  // Initialize SGP40
-  if (sgp.begin()) {
-    Serial.println("SGP40 sensor found!");
-    sgp40_initialized = true;
-  } else {
-    Serial.println("Could not find SGP40 sensor!");
-    sgp40_initialized = false;
-  }
-
-  // Small delay to ensure stable sensor initialization
-  delay(100);
+  // Initialize the SGP40 air quality sensor
+  sgp.begin();
 
   //Calibrate the touch screen and display the initial screen
   touch_calibrate();  
   displayScreen(currentScreen);  
-}
 
+}
+void updateSensors() {
+  unsigned long currentTime = millis();
+  if (currentTime - sensorState.lastUpdate >= SENSOR_UPDATE_INTERVAL) {
+    sensorState.temperature = bme.readTemperature();
+    sensorState.humidity = bme.readHumidity();
+    sensorState.vocIndex = sgp.measureVocIndex(sensorState.temperature, sensorState.humidity);
+    sensorState.lastUpdate = currentTime;
+
+  temp = sensorState.temperature;
+  hum = sensorState.humidity;
+  voc_index = sensorState.vocIndex;
+  }
+}
 void loop(void) {
   // Main loop to handle touch input and update screens
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
+
+  // Update sensors in a non-blocking way
+  updateSensors();
 
   // Check if fan changes need to be saved
   if (fanChangesPending && (millis() - lastFanChange >= FAN_SAVE_DELAY)) {
@@ -461,9 +494,46 @@ void loop(void) {
     if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
       updateTempAndAirQualityDisplay();
   }
+    // Handle temperature and air quality screen updates
+  if (currentScreen == 1) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
+      updatePIDDisplay();
+      
+    // Handle PID control button presses
+    if (pressed) {
+      // Check PID toggle button
+      if (t_x >= 20 && t_x <= 70 && t_y >= 200 && t_y <= 250) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          PIDactive = !PIDactive;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+      // Check Up button
+      else if (t_x >= 170 && t_x <= 230 && t_y >= 150 && t_y <= 190) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          Setpoint += 0.5;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+      // Check Down button
+      else if (t_x >= 170 && t_x <= 230 && t_y >= 220 && t_y <= 260) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          Setpoint -= 0.5;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+    }
+  }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
-    for (uint8_t b = 0; b < 4; b++) {  // Adjusted loop to 3 buttons
+    for (uint8_t b = 0; b < 4; b++) {  // Adjusted loop to 4 buttons
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
     }
 
@@ -472,7 +542,7 @@ void loop(void) {
       if (mainMenuButtons[b].justPressed()) {
         unsigned long currentTime = millis();
         if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
-          lastButtonPress = currentTime + 250; // Add extra delay for button presses
+          lastButtonPress = currentTime + 50; // Add extra delay for button presses
           switch(b) {
             case 0: currentScreen = 7; break;  // Fans (moved from Settings)
             case 1: currentScreen = 3; break;  // Temperature and Air Quality
@@ -673,12 +743,11 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   sprite->setTextColor(TFT_WHITE, bgColor);
   // Adjust text size and position for VOC gauge
   int textSize = (sprite->width() == 98) ? 2 : 4;
-  sprite->setTextDatum(MC_DATUM);  // Set text datum to middle-center
-  sprite->drawString(buf, x, y-(round(16 * scale)));
+  sprite->drawCentreString(buf, x, y-(round(16 * scale)), textSize);
   
   sprite->setTextSize(1);
   sprite->setTextColor(TFT_WHITE, bgColor);
-  sprite->drawString(label, x, y+5);
+  sprite->drawCentreString(label, x, y+5, 2);
 }
 
 void displayLoadingScreen() {
@@ -728,7 +797,7 @@ void displayScreen(int screen) {  // Update screen display logic
       drawMainMenu(); // Display Main Menu
       break;
     case 1:
-      displayPID();  // Display screen 1
+      displayPID();  // PID
       break;
     case 2:
       displayBGBrightness(); // Display Backlight Control screen
@@ -766,11 +835,11 @@ void drawMainMenu() {
   menuSprite.setTextSize(1);
   menuSprite.setCursor(50, 50);
   menuSprite.print("Main Menu");
-    menuSprite.setFreeFont(LABEL2_FONT);
+  menuSprite.setFreeFont(LABEL2_FONT);
 
   // Initialize buttons with menuSprite instead of tft
   mainMenuButtons[0].initButton(&menuSprite, 120, 100, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Fans", 1); // Replaced Screen 1 with Fans
-  mainMenuButtons[1].initButton(&menuSprite, 120, 160, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"AQI", 1);
+  mainMenuButtons[1].initButton(&menuSprite, 120, 160, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"Temp", 1);
   mainMenuButtons[2].initButton(&menuSprite, 120, 220, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"PID", 1);
   mainMenuButtons[3].initButton(&menuSprite, 120, 280, 220, 40, TFT_WHITE, TFT_DARKGREY, TFT_WHITE, (char*)"Settings", 1);
 
@@ -783,63 +852,92 @@ void drawMainMenu() {
 }
 
 void displayPID() {
-  // Create sprites with proper dimensions for 240x320 display
-  if (!pidSprite.created()) {
-    pidSprite.createSprite(240, 320);
-    pidSprite.setTextColor(TFT_WHITE);
-    pidSprite.setFreeFont(LABEL2_FONT);
-  }
-  if (!tempSprite.created()) {
-    tempSprite.createSprite(220, 80);  // Larger sprite for temperature display
-    tempSprite.setTextColor(TFT_WHITE);
-    tempSprite.setFreeFont(LABEL2_FONT);
-  }
-  if (!controlSprite.created()) {
-    controlSprite.createSprite(220, 60);  // Adjusted for fan control display
-    controlSprite.setTextColor(TFT_WHITE);
-    controlSprite.setFreeFont(LABEL2_FONT);
+
+ // Berechne PID-Output nur, wenn PID aktiv ist
+  if (PIDactive==true) {
+  //turn the PID on
+   myPID.SetMode(myPID.Control::automatic);
+   //myPID.SetControllerDirection(REVERSE);
+   myPID.Compute();
+   Fan_PWM[0]->setPWM(FAN1_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[1]->setPWM(FAN2_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[2]->setPWM(FAN3_PIN, fanFrequency, fanSpeed2);
   }
 
-  // Draw title centered at top
-  controlSprite.fillSprite(TFT_BLACK);
-  controlSprite.setTextDatum(MC_DATUM);  // Set text datum to middle-center
-  controlSprite.drawString("Fan Speed", 110, 5);
-  controlSprite.drawString(String(int(pidOutput)) + "%", 110, 25);
-  controlSprite.pushSprite(10, 250);
+  tft.setTextColor(TFT_WHITE);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(1);
+  tft.setCursor(10, 20);
+  tft.print("PID Control");
 
-  // Display current temperature
-  float currentTemp = bme.readTemperature();
-  pidInput = currentTemp;
+  // PID Active Toggle Button
+  tft.drawRect(20, 200, 50, 50, TFT_WHITE);
+  tft.fillRect(22, 202, 46, 46, PIDactive ? TFT_GREEN : TFT_RED);
+  tft.setCursor(27, 227);
+  tft.print(PIDactive ? "ON" : "OFF");
+
+  // Setpoint Up/Down Buttons
+  tft.drawRect(170, 150, 60, 40, TFT_WHITE);
+  tft.fillRect(172, 152, 56, 36, TFT_BLUE);
+  tft.setCursor(184, 165);
+  tft.print("+");
+
+  tft.drawRect(170, 220, 60, 40, TFT_WHITE);
+  tft.fillRect(172, 222, 56, 36, TFT_BLUE);
+  tft.setCursor(184, 235);
+  tft.print("-");
+
+  // Display current temperature and setpoint
+  tft.setCursor(20, 100);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 120);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
+
+  tft.setCursor(20, 100);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 120);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
+
+  // Draw back button
+  screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
+  screenButton.drawButton();
+
+  // Anzeige aktualisieren
+  updatePIDDisplay;
+}
+
+void updatePIDDisplay() {
+  unsigned long currentMillis = millis();
+  lastSensorUpdate = currentMillis;
+  Serial.println();
+  Serial.print(F(" Setpoint: "));  Serial.println(Setpoint);
+  Serial.print(F(" Input:    "));  Serial.println(temp);
+  Serial.print(F(" Output:   "));  Serial.println(fanSpeed2);
+  Serial.print(F(" Pterm:    "));  Serial.println(myPID.GetPterm());
+  Serial.print(F(" Iterm:    "));  Serial.println(myPID.GetIterm());
+  Serial.print(F(" Dterm:    "));  Serial.println(myPID.GetDterm());
+  Serial.print(F(" Control:  "));  Serial.println(myPID.GetMode());
+  Serial.print(F(" Action:   "));  Serial.println(myPID.GetDirection());
+  Serial.print(F(" Pmode:    "));  Serial.println(myPID.GetPmode());
+  Serial.print(F(" Dmode:    "));  Serial.println(myPID.GetDmode());
+  Serial.print(F(" AwMode:   "));  Serial.println(myPID.GetAwMode());
+  tft.fillRect(120, 85,  100,  20, TFT_BLACK);
+  tft.fillRect(130, 110,  100,  20, TFT_BLACK);
+  tft.setCursor(20, 100);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 120);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
   
-  // Draw temperature displays in larger format
-  tempSprite.fillSprite(TFT_BLACK);
-  tempSprite.drawString("Current:", 20, 10);
-  tempSprite.setTextFont(4);  // Larger font for temperature
-  tempSprite.drawString(String(currentTemp, 1) + "Â°C", 120, 10);
-  tempSprite.setTextFont(2);
-  tempSprite.drawString("Target:", 20, 45);
-  tempSprite.setTextFont(4);
-  tempSprite.drawString(String(pidSetpoint, 1) + "Â°C", 120, 45);
-  tempSprite.pushSprite(10, 60);
-
-  // Position setpoint control buttons
-  mainMenuButtons[0].initButton(&pidSprite, 190, 85, 40, 35, TFT_WHITE, TFT_BLUE, TFT_WHITE, plusLabel, 1);
-  mainMenuButtons[1].initButton(&pidSprite, 190, 125, 40, 35, TFT_WHITE, TFT_BLUE, TFT_WHITE, minusLabel, 1);
-  mainMenuButtons[0].drawButton();
-  mainMenuButtons[1].drawButton();
-
-  // Draw PID enable/disable button
-  mainMenuButtons[2].initButton(&pidSprite, 120, 200, 200, 40, TFT_WHITE, 
-    pidEnabled ? TFT_RED : TFT_GREEN, TFT_WHITE, 
-    pidEnabled ? pidDisableLabel : pidEnableLabel, 1);
-  mainMenuButtons[2].drawButton();
-
-  // Draw fan speed indicator
-  controlSprite.fillSprite(TFT_BLACK);
-  controlSprite.setTextDatum(MC_DATUM);  // Set text datum to middle-center
-  controlSprite.drawString("Fan Speed", 110, 5);
-  controlSprite.drawString(String(int(pidOutput)) + "%", 110, 25);
-  controlSprite.pushSprite(10, 250);
+  if (PIDactive==true) {
+  float gap = abs(Setpoint - temp); //distance away from setpoint
+  if (gap < 2) { //we're close to setpoint, use conservative tuning parameters
+    myPID.SetTunings(consKp, consKi, consKd);
+  } else {
+    //we're far from setpoint, use aggressive tuning parameters
+    myPID.SetTunings(aggKp, aggKi, aggKd);
+    myPID.Compute();
+   }
+  }
 }
 
 void displayBGBrightness() {
@@ -908,21 +1006,6 @@ void displayTempAndAirQuality() {
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
-  // Only initialize BME280 and SGP40 once
-  if (!bme280_initialized) {
-    tft.setCursor(10, 70);
-    tft.print("BME280 not found!");
-    delay(2000);  // Show error for 2 seconds
-    return;
-  }
-  
-  if (!sgp40_initialized) {
-    tft.setCursor(10, 90);
-    tft.print("SGP40 not found!");
-    delay(2000);  // Show error for 2 seconds
-    return;
-  }
-
   // Initialize sprites only once
   if (!gaugesInitialized) {
     if (!gauge1.created()) {
@@ -956,14 +1039,15 @@ void displayTempAndAirQuality() {
     gaugebg.pushSprite(0, 0);
   }
 
-  float temp = bme.readTemperature();
+ /* float temp = bme.readTemperature();
+  Serial.print(temp);
   float hum = bme.readHumidity();
-  int32_t voc_index = sgp.measureVocIndex(temp, hum);
-  uint16_t voc_color = TFT_DARKGREEN ;
-  if (voc_index > 100) voc_color = TFT_GREEN;
-  if (voc_index > 200) voc_color = TFT_YELLOW;
-  if (voc_index > 300) voc_color = TFT_ORANGE;
-  if (voc_index > 400) voc_color = TFT_RED;
+  int32_t voc_index = sgp.measureVocIndex(temp, hum);*/
+
+  uint16_t voc_color = TFT_GREEN;
+  if (voc_index > 100) voc_color = TFT_YELLOW;
+  if (voc_index > 200) voc_color = TFT_ORANGE;
+  if (voc_index > 300) voc_color = TFT_RED;
   
   // Draw to sprites instead of screen
   drawGaugeToSprite(&gauge1, 70, 65, 0, 60, temp, "Temp C", TFT_RED, 0x8800);
@@ -987,11 +1071,11 @@ void updateTempAndAirQualityDisplay() {
     return;
   }
    
-  float temp = bme.readTemperature();
-  float hum = bme.readHumidity();
+ // float temp = bme.readTemperature();
+  //float hum = bme.readHumidity();
   
   // Get VOC reading with temperature/humidity compensation
-  int32_t voc_index = sgp.measureVocIndex(temp, hum);
+ // int32_t voc_index = sgp.measureVocIndex(temp, hum);
   uint16_t voc_color = TFT_GREEN;
   if (voc_index > 100) voc_color = TFT_YELLOW;
   if (voc_index > 200) voc_color = TFT_ORANGE;
@@ -1181,6 +1265,7 @@ void displayFanControl(uint8_t fanIndex) {
             }
             // Save all fan speeds after updating
             saveFanSpeeds(currentFanSpeeds);
+            
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
@@ -1197,15 +1282,21 @@ void displayFanControl(uint8_t fanIndex) {
           } else {
             // Original single fan update code
             Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
-            int yOffset = i * 90;
-            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
-            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
-            tft.setTextColor(TFT_GREEN);
-            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
-            tft.setTextColor(TFT_WHITE);
+        
+              int yOffset = i * 90;
+              tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+              tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+              tft.setTextColor(TFT_GREEN);
+              tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+              tft.setTextColor(TFT_WHITE);
             
-            // Save individual fan speed changes
-            saveFanSpeeds(currentFanSpeeds);
+            // Mark changes as pending and update timestamp
+            fanChangesPending = true;
+            lastFanChange = millis();
+            
+            // If we're exiting the screen, force save
+            if (screenButton.justPressed())
+              saveFanSpeeds(currentFanSpeeds);
           }
         }
       }
@@ -1515,47 +1606,5 @@ void displayInfoScreen() {
     tft.setFreeFont(LABEL2_FONT);  // Use larger font
     tft.setCursor(10, 300);
     tft.print("No I2C devices found");
-  }
-}
-
-void savePIDSettings() {
-  File f = LittleFS.open(PID_SETTINGS_FILE, "w");
-  if (f) {
-    f.println(Kp);
-    f.println(Ki);
-    f.println(Kd);
-    f.println(pidSetpoint);
-    f.println(pidEnabled ? "1" : "0");
-    f.close();
-    Serial.println("PID settings saved successfully");
-  } else {
-    Serial.println("Failed to save PID settings");
-  }
-}
-
-void loadPIDSettings() {
-  if (LittleFS.exists(PID_SETTINGS_FILE)) {
-    File f = LittleFS.open(PID_SETTINGS_FILE, "r");
-    if (f) {
-      String kp = f.readStringUntil('\n');
-      String ki = f.readStringUntil('\n');
-      String kd = f.readStringUntil('\n');
-      String sp = f.readStringUntil('\n');
-      String en = f.readStringUntil('\n');
-      
-      // Remove any whitespace/newlines
-      kp.trim(); ki.trim(); kd.trim(); sp.trim(); en.trim();
-      
-      Kp = kp.toFloat();
-      Ki = ki.toFloat();
-      Kd = kd.toFloat();
-      pidSetpoint = sp.toFloat();
-      pidEnabled = (en == "1");
-      
-      f.close();
-      Serial.println("PID settings loaded successfully");
-    } else {
-      Serial.println("Failed to load PID settings");
-    }
   }
 }
