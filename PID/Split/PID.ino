@@ -36,7 +36,7 @@ void displayPID() {
   
   // Draw outer ring with gradient
   for(int r = radius; r > radius-5; r--) {
-    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60°C
+    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60Â°C
     uint16_t gaugeColor = tft.color565(255 * tempRatio, 255 * (1-tempRatio), 0);
     tft.drawCircle(centerX, centerY, r, gaugeColor);
   }
@@ -52,20 +52,22 @@ void displayPID() {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(&FreeSansBold9pt7b);
   tft.setCursor(centerX-30, centerY-10);
-  tft.printf("%.1f°C", temp);
+  tft.printf("%.1fÂ°C", temp);
   tft.setFreeFont(&FreeSans9pt7b);
   tft.setCursor(centerX-25, centerY+20);
-  tft.printf("/ %.1f°C", Setpoint);
+  tft.printf("/ %.1fÂ°C", Setpoint);
 
-  // Modern toggle switch for PID
-  int toggleX = 30;
-  int toggleY = 280;
-  tft.fillRoundRect(toggleX, toggleY, 60, 30, 15, PIDactive ? TFT_GREEN : TFT_DARKGREY);
-  tft.fillCircle(toggleX + (PIDactive ? 45 : 15), toggleY + 15, 12, TFT_WHITE);
+  // Initialize PID toggle button
+  pidToggle.initButton(&tft, 60, 280, 100, 40, TFT_WHITE, 
+                      PIDactive ? TFT_GREEN : TFT_DARKGREY,
+                      TFT_WHITE, PIDactive ? (char*)"PID ON" : (char*)"PID OFF", 1);
+  pidToggle.drawButton();
   
-  // Stylish up/down buttons
-  drawRoundButton(190, 200, 40, 40, "+", TFT_BLUE);
-  drawRoundButton(190, 260, 40, 40, "-", TFT_BLUE);
+  // Initialize temperature control buttons
+  tempUp.initButton(&tft, 190, 200, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"+", 1);
+  tempDown.initButton(&tft, 190, 260, 40, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE, (char*)"-", 1);
+  tempUp.drawButton();
+  tempDown.drawButton();
   
   // PID terms visualization
   int barX = 20;
@@ -82,15 +84,6 @@ void displayPID() {
   updatePIDDisplay();
 }
 
-// Helper function to draw rounded buttons
-void drawRoundButton(int x, int y, int w, int h, const char* label, uint16_t color) {
-  tft.fillRoundRect(x, y, w, h, 10, color);
-  tft.drawRoundRect(x, y, w, h, 10, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE);
-  tft.setFreeFont(&FreeSansBold9pt7b);
-  tft.setCursor(x + w/2 - 5, y + h/2 + 5);
-  tft.print(label);
-}
 
 // Helper function to draw PID term bars
 void drawPIDBar(int x, int y, const char* term, float value, uint16_t color) {
@@ -113,7 +106,7 @@ void updatePIDDisplay() {
   
   // Draw outer ring with gradient
   for(int r = radius; r > radius-5; r--) {
-    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60°C
+    float tempRatio = (temp - 20) / 40.0; // Assuming range 20-60Â°C
     uint16_t gaugeColor = tft.color565(255 * tempRatio, 255 * (1-tempRatio), 0);
     tft.drawCircle(centerX, centerY, r, gaugeColor);
   }
@@ -129,17 +122,12 @@ void updatePIDDisplay() {
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(&FreeSansBold9pt7b);
   tft.setCursor(centerX-30, centerY-10);
-  tft.printf("%.1f°C", temp);
+  tft.printf("%.1fÂ°C", temp);
   tft.setFreeFont(&FreeSans9pt7b);
   tft.setCursor(centerX-25, centerY+20);
-  tft.printf("/ %.1f°C", Setpoint);
+  tft.printf("/ %.1fÂ°C", Setpoint);
 
-  // Modern toggle switch for PID
-  int toggleX = 30;
-  int toggleY = 280;
-  tft.fillRoundRect(toggleX, toggleY, 60, 30, 15, PIDactive ? TFT_GREEN : TFT_DARKGREY);
-  tft.fillCircle(toggleX + (PIDactive ? 45 : 15), toggleY + 15, 12, TFT_WHITE);
-  
+
  
   // PID terms visualization
   int barX = 20;

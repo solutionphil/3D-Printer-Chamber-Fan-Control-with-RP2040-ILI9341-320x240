@@ -41,6 +41,11 @@ float Setpoint = 25.0;
 bool PIDactive = false;
 #define PID_SETTINGS_FILE "/pid_settings.txt"
 
+// PID Control Buttons
+TFT_eSPI_Button pidToggle;
+TFT_eSPI_Button tempUp;
+TFT_eSPI_Button tempDown;
+
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
 // Create single shared sprite for all UI elements
@@ -390,43 +395,35 @@ void loop(void) {
       updateTempAndAirQualityDisplay();
   }
     // Handle temperature and air quality screen updates
-  if (currentScreen == 1) {
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
-      updatePIDDisplay();
-      
-    // Handle PID control button presses
-    if (pressed) {
-      // Check PID toggle button
-      if (t_x >= 20 && t_x <= 70 && t_y >= 200 && t_y <= 250) {
+    if (currentScreen == 1) {
+      unsigned long currentMillis = millis();
+      if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
+        updatePIDDisplay();
+        
+      // Handle PID control button presses
+      if (pressed) {
+        if (pidToggle.contains(t_x, t_y)) {
         if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = millis();
-         if (PIDactive = !PIDactive)
-         {
-             myPID.SetMode(myPID.Control::automatic);
-          }
-          else
-          {
-            myPID.SetMode(myPID.Control::manual);
-          }
+          PIDactive = !PIDactive;
+          myPID.SetMode(PIDactive ? myPID.Control::automatic : myPID.Control::manual);
           savePIDSettings();
           updatePIDDisplay();
         }
       }
-      // Check Up button
-      else if (t_x >= 170 && t_x <= 230 && t_y >= 150 && t_y <= 190) {
+      // Check temperature control buttons
+      else if (tempUp.contains(t_x, t_y)) {
         if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = millis();
-          Setpoint += 0.5;
+          Setpoint = constrain(Setpoint + 0.5, 20.0, 40.0);
           savePIDSettings();
           updatePIDDisplay();
         }
       }
-      // Check Down button
-      else if (t_x >= 170 && t_x <= 230 && t_y >= 220 && t_y <= 260) {
+      else if (tempDown.contains(t_x, t_y)) {
         if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
           lastButtonPress = millis();
-          Setpoint -= 0.5;
+          Setpoint = constrain(Setpoint - 0.5, 20.0, 40.0);
           savePIDSettings();
           updatePIDDisplay();
         }
@@ -651,4 +648,3 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   sprite->setTextColor(TFT_WHITE, bgColor);
   sprite->drawCentreString(label, x, y+5, 2);
 }
-
