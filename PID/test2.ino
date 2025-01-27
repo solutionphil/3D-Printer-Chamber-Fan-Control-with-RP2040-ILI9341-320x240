@@ -35,6 +35,10 @@
 #include <Wire.h>
 #include <QuickPID.h>
 
+// PID Control Variables
+float Setpoint = 25.0;
+bool PIDactive = false;
+#define PID_SETTINGS_FILE "/pid_settings.txt"
 
 // Initialize TFT
 TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
@@ -77,6 +81,15 @@ struct SensorData {
   float temp = sensorState.temperature;
   float hum = sensorState.humidity;
   int32_t voc_index = sensorState.vocIndex;
+
+//Define the aggressive and conservative and POn Tuning Parameters
+float aggKp = 4, aggKi = 0.2, aggKd = 1;
+float consKp = 1, consKi = 0.05, consKd = 0.25;
+
+float fanSpeed2=30;
+//Specify the links
+QuickPID myPID(&temp, &fanSpeed2, &Setpoint);
+
 
 // Global variables and definitions
 bool neopixelState = false;  // Track NeoPixel state
@@ -292,6 +305,29 @@ void loadFanSpeeds(float speeds[3]) {
   }
 }
 
+void savePIDSettings() {
+  File f = LittleFS.open(PID_SETTINGS_FILE, "w");
+  if (f) {
+    f.println(Setpoint);
+    f.println(PIDactive ? "1" : "0");
+    f.close();
+  }
+}
+
+void loadPIDSettings() {
+  if (LittleFS.exists(PID_SETTINGS_FILE)) {
+    File f = LittleFS.open(PID_SETTINGS_FILE, "r");
+    if (f) {
+      String setpoint = f.readStringUntil('\n');
+      String active = f.readStringUntil('\n');
+      Setpoint = setpoint.toFloat();
+      active.trim();  // Trim the string first
+      PIDactive = (active == "1");  // Then compare
+      f.close();
+    }
+  }
+}
+
 void setNeoPixelColor(int screenNumber) {
   if (!neopixelState) return; // Don't change colors if LED is off
 
@@ -329,13 +365,10 @@ void setNeoPixelColor(int screenNumber) {
 
 void setup() {
 
-
-
   // Initialize serial communication for debugging
   Serial.begin(9600);  
 
-  
-  // Initialize I2C0
+    // Initialize I2C0
   Wire.setSDA(I2C0_SDA);
   Wire.setSCL(I2C0_SCL);
   Wire.begin();
@@ -402,6 +435,11 @@ void setup() {
     Fan_PWM[i] = new RP2040_PWM(FAN1_PIN + i, fanFrequency, 0);
   }
 
+  //turn the PID on
+  myPID.SetMode(myPID.Control::manual);
+  myPID.SetControllerDirection(myPID.Action::reverse);
+  myPID.SetOutputLimits(30, 100);
+
   // Load saved fan speeds
   float fanSpeeds[3] = {0, 0, 0};
   loadFanSpeeds(fanSpeeds);
@@ -461,6 +499,37 @@ void loop(void) {
     unsigned long currentMillis = millis();
     if (currentMillis - lastSensorUpdate >= SENSOR_UPDATE_INTERVAL)
       updatePIDDisplay();
+      
+    // Handle PID control button presses
+    if (pressed) {
+      // Check PID toggle button
+      if (t_x >= 20 && t_x <= 70 && t_y >= 200 && t_y <= 250) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          PIDactive = !PIDactive;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+      // Check Up button
+      else if (t_x >= 170 && t_x <= 230 && t_y >= 150 && t_y <= 190) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          Setpoint += 0.5;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+      // Check Down button
+      else if (t_x >= 170 && t_x <= 230 && t_y >= 220 && t_y <= 260) {
+        if (millis() - lastButtonPress >= DEBOUNCE_DELAY) {
+          lastButtonPress = millis();
+          Setpoint -= 0.5;
+          savePIDSettings();
+          displayPID();
+        }
+      }
+    }
   }
 
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
@@ -784,31 +853,30 @@ void drawMainMenu() {
 
 void displayPID() {
 
-
  // Berechne PID-Output nur, wenn PID aktiv ist
-  //if (pidActive) {
-   // myPID.Compute();
-  //}
- 
- 
- /*
-  // Steuerung der Lüfter mit dem PID-Output
-  for (int i = 0; i < 3; i++) {
-    Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, Output, false);
+  if (PIDactive==true) {
+  //turn the PID on
+   myPID.SetMode(myPID.Control::automatic);
+   //myPID.SetControllerDirection(REVERSE);
+   myPID.Compute();
+   Fan_PWM[0]->setPWM(FAN1_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[1]->setPWM(FAN2_PIN, fanFrequency, fanSpeed2);
+   Fan_PWM[2]->setPWM(FAN3_PIN, fanFrequency, fanSpeed2);
   }
-  */
 
   tft.setTextColor(TFT_WHITE);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(1);
   tft.setCursor(10, 20);
-  tft.print("PID");
+  tft.print("PID Control");
 
+  // PID Active Toggle Button
   tft.drawRect(20, 200, 50, 50, TFT_WHITE);
-  tft.fillRect(22, 202, 46, 46, TFT_GREEN);
+  tft.fillRect(22, 202, 46, 46, PIDactive ? TFT_GREEN : TFT_RED);
   tft.setCursor(27, 227);
-  tft.print("ON");
+  tft.print(PIDactive ? "ON" : "OFF");
 
+  // Setpoint Up/Down Buttons
   tft.drawRect(170, 150, 60, 40, TFT_WHITE);
   tft.fillRect(172, 152, 56, 36, TFT_BLUE);
   tft.setCursor(184, 165);
@@ -819,13 +887,18 @@ void displayPID() {
   tft.setCursor(184, 235);
   tft.print("-");
 
+  // Display current temperature and setpoint
   tft.setCursor(20, 100);
   tft.printf("Current Temp: %.2f C\n", temp);
   tft.setCursor(20, 120);
-  //tft.printf("Target Temp: %.2f C\n", Setpoint);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
 
+  tft.setCursor(20, 100);
+  tft.printf("Current Temp: %.2f C\n", temp);
+  tft.setCursor(20, 120);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
 
-    // Draw back button
+  // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
 
@@ -836,14 +909,36 @@ void displayPID() {
 void updatePIDDisplay() {
   unsigned long currentMillis = millis();
   lastSensorUpdate = currentMillis;
-
+  Serial.println();
+  Serial.print(F(" Setpoint: "));  Serial.println(Setpoint);
+  Serial.print(F(" Input:    "));  Serial.println(temp);
+  Serial.print(F(" Output:   "));  Serial.println(fanSpeed2);
+  Serial.print(F(" Pterm:    "));  Serial.println(myPID.GetPterm());
+  Serial.print(F(" Iterm:    "));  Serial.println(myPID.GetIterm());
+  Serial.print(F(" Dterm:    "));  Serial.println(myPID.GetDterm());
+  Serial.print(F(" Control:  "));  Serial.println(myPID.GetMode());
+  Serial.print(F(" Action:   "));  Serial.println(myPID.GetDirection());
+  Serial.print(F(" Pmode:    "));  Serial.println(myPID.GetPmode());
+  Serial.print(F(" Dmode:    "));  Serial.println(myPID.GetDmode());
+  Serial.print(F(" AwMode:   "));  Serial.println(myPID.GetAwMode());
   tft.fillRect(120, 85,  100,  20, TFT_BLACK);
   tft.fillRect(130, 110,  100,  20, TFT_BLACK);
   tft.setCursor(20, 100);
   tft.printf("Current Temp: %.2f C\n", temp);
   tft.setCursor(20, 120);
-  //tft.printf("Target Temp: %.2f C\n", Setpoint);
+  tft.printf("Target Temp: %.2f C\n", Setpoint);
+  
+  if (PIDactive==true) {
+  float gap = abs(Setpoint - temp); //distance away from setpoint
+  if (gap < 2) { //we're close to setpoint, use conservative tuning parameters
+    myPID.SetTunings(consKp, consKi, consKd);
+  } else {
+    //we're far from setpoint, use aggressive tuning parameters
+    myPID.SetTunings(aggKp, aggKi, aggKd);
+    myPID.Compute();
    }
+  }
+}
 
 void displayBGBrightness() {
   // Clear screen and set up title
@@ -910,8 +1005,6 @@ void displayTempAndAirQuality() {
   // Draw back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
-
-
 
   // Initialize sprites only once
   if (!gaugesInitialized) {
