@@ -1,7 +1,7 @@
  /* Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
- * Date: 01/31/2025
+ * Date: 02/04/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
@@ -40,7 +40,7 @@ unsigned long inactivityThreshold = 13000; //10sec
 unsigned long inactivityThreshold2 = 26000; //10sec
 bool isDimmed = false;
 bool isOFF = false;
-
+float neoPixelBrightness = 50.0; // Default NeoPixel brightness value
 // PID Control Variables
 float Setpoint = 25.0;
 float Kp = 2, Ki = 5, Kd = 1;
@@ -94,7 +94,7 @@ float fanFrequency = 20000;  // Separate frequency for fans
 
 // Debounce control
 unsigned long lastButtonPress = 0;
-const unsigned long DEBOUNCE_DELAY = 250; // 250ms debounce time
+const unsigned long DEBOUNCE_DELAY = 100; // 100ms debounce time
 
 #define LED_STATE_FILE "/led_state.txt"
 
@@ -269,24 +269,29 @@ void cleanupSprites() {
     Serial.printf("Free RAM after cleanup: %d bytes\n", rp2040.getFreeHeap());
 }
 
-void saveBrightness(float value) {
+void saveBrightness(float displayBrightness, float neoPixelBrightness) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
   if (f) {
-    f.println(value);
+    f.println(displayBrightness);
+    f.println(neoPixelBrightness);
     f.close();
   }
 }
 
-float loadBrightness() {
+void loadBrightness(float &displayBrightness, float &neoPixelBrightness) {
   if (LittleFS.exists(BRIGHTNESS_FILE)) {
     File f = LittleFS.open(BRIGHTNESS_FILE, "r");
     if (f) {
       String val = f.readStringUntil('\n');
+      displayBrightness = val.toFloat();
+      val = f.readStringUntil('\n');
+      neoPixelBrightness = val.toFloat();
       f.close();
-      return val.toFloat();
+      return;
     }
   }
-  return 90.0; // Default brightness if file doesn't exist
+  displayBrightness = 90.0; // Default display brightness if file doesn't exist
+  neoPixelBrightness = 50.0; // Default NeoPixel brightness if file doesn't exist
 }
 
 void saveLEDState(bool state) {
@@ -350,6 +355,9 @@ void loadFanSpeeds(float speeds[3]) {
       Serial.println("Fan speeds loaded successfully");
     } else {
       Serial.println("Failed to open fan settings file for reading");
+              for (int i = 0; i < 3; i++) {
+              Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, 30);
+    }
     }
   }
 }
@@ -415,7 +423,7 @@ void setNeoPixelColor(int screenNumber) {
 
 void LoadnSetFanSpeeds(){
   // Load saved fan speeds
-  float fanSpeeds[3] = {0, 0, 0};
+  float fanSpeeds[3] = {30, 30, 30};
   loadFanSpeeds(fanSpeeds);
   for (int i = 0; i < 3; i++) {
     currentFanSpeeds[i] = fanSpeeds[i];
@@ -470,7 +478,7 @@ void setup() {
   delay(100); // Small delay for stable initialization
 
   // Load saved brightness
-  dutyCycle = loadBrightness();
+  loadBrightness(dutyCycle, neoPixelBrightness);
   
   // Load saved LED state
   neopixelState = loadLEDState();
@@ -540,50 +548,34 @@ void loop(void) {
   uint16_t t_x = 0, t_y = 0;  // Variables to store touch coordinates
   bool pressed = tft.getTouch(&t_x, &t_y);  // Boolean indicating if the screen is being touched
 
-    if (tft.getTouch(&t_x, &t_y)) {
-      if (isDimmed || isOFF) {
-        t_x=0;
-        t_y=0;
-        delay(20);
-         loadBrightness();
-          dutyCycle = loadBrightness();
-         Serial.println("RECOVER BRIGHTNESS");
-         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        isDimmed=false;
-        isOFF=false;
-      }
-      lastActivityTime =millis();
-      }
-
-    if (millis() - lastActivityTime > inactivityThreshold && !isDimmed){
-        dutyCycle = 30;
-        PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        isDimmed=true;
-           Serial.println("DIMMED BRIGHTNESS");
-    }
-    else if (millis() - lastActivityTime > inactivityThreshold2 && isDimmed){
-        dutyCycle = 0;
-        PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        isOFF=true;
-           Serial.println("BRIGHTNESS OFF");
-    }
-/*
-  // Check for touch input
   if (tft.getTouch(&t_x, &t_y)) {
-    // Print touch coordinates to the serial monitor
-    Serial.print("Touch detected at: ");
-    Serial.print("X = ");
-    Serial.print(t_x);
-    Serial.print(", Y = ");
-    Serial.println(t_y);
-
-    // Draw a small circle at the touch point for visualization
-    tft.fillCircle(t_x, t_y, 5, TFT_WHITE);
+    if (isDimmed || isOFF) {
+      t_x = 0;
+      t_y = 0;
+      delay(20);
+      loadBrightness(dutyCycle, neoPixelBrightness);
+      Serial.println("RECOVER BRIGHTNESS");
+      PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+      isDimmed = false;
+      isOFF = false;
+    }
+    lastActivityTime = millis();
   }
-*/
+
+  if (millis() - lastActivityTime > inactivityThreshold && !isDimmed && dutyCycle>=30) {
+    dutyCycle = 30;
+    PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+    isDimmed = true;
+    Serial.println("DIMMED BRIGHTNESS");
+  } else if (millis() - lastActivityTime > inactivityThreshold2 && isDimmed) {
+    dutyCycle = 0;
+    PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
+    isOFF = true;
+    //Serial.println("BRIGHTNESS OFF");
+  }
+
   // Update sensors in a non-blocking way
   updateSensors();
-
   // Handle temperature and air quality screen updates
   if (currentScreen == 3) {
     unsigned long currentMillis = millis();
@@ -694,6 +686,20 @@ void loop(void) {
       displayLEDControl();
       delay(500);
     }
+
+    // Handle NeoPixel brightness slider touch
+    if (pressed) {
+      if (slider2.checkTouch(t_x, t_y)) {
+        neoPixelBrightness = round(slider2.getSliderPosition() / 10.0) * 10.0;
+        slider2.setSliderPosition(neoPixelBrightness);
+        pixels.setBrightness(neoPixelBrightness);
+        pixels.show();
+        saveBrightness(dutyCycle, neoPixelBrightness);
+          tft.fillRect(95, 85, 70, 30, TFT_BLACK);
+        tft.setTextColor(TFT_GREEN);
+        tft.drawString(String(int(neoPixelBrightness)) + "%", 100, 90);
+      }
+    }
   } else if (currentScreen == 7) {
     for (uint8_t b = 0; b < 3; b++) {
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
@@ -712,11 +718,11 @@ void loop(void) {
         dutyCycle = round(slider1.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
         slider1.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        saveBrightness(dutyCycle);  // Save the new brightness value
+        saveBrightness(dutyCycle, neoPixelBrightness);  // Save the new brightness value
         // Update percentage display
-        tft.fillRect(90, 110, 80, 30, TFT_BLACK);
+        tft.fillRect(90, 55, 80, 25, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
-        tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+        tft.drawString(String(int(dutyCycle)) + "%", 100, 65);
       }
     }
   }
@@ -1206,12 +1212,12 @@ void displayBGBrightness() {
   tft.setTextColor(TFT_CYAN);
   tft.setFreeFont(LABEL2_FONT);
   tft.setTextSize(0);
-  tft.drawString("Brightness", 30, 50);
+  tft.drawString("Brightness", 20, 20);
 
   // Update percentage display
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
   tft.setTextColor(TFT_GREEN);
-  tft.drawString(String(int(dutyCycle)) + "%", 100, 120);
+  tft.drawString(String(int(dutyCycle)) + "%", 100, 65);
 
   // Create slider parameters
   slider_t param;
@@ -1233,16 +1239,19 @@ void displayBGBrightness() {
   // Slider range and movement
   param.sliderLT = 10;
   param.sliderRB = 100;
-  param.startPosition = int16_t(50);
+  param.startPosition = dutyCycle;
   param.sliderDelay = 0;
-  // Draw the slider
-  slider1.drawSlider(20, 160, param);
 
+    // Draw the slider
+  slider1.drawSlider(20, 100, param);
+  slider1.setSliderPosition(66);
+  slider1.setSliderPosition(dutyCycle);
   int16_t x, y;    // x and y can be negative
   uint16_t w, h;   // Width and height
   slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
-  slider1.setSliderPosition(dutyCycle);
+
+
 }
 
 void displayTempAndAirQuality() {
@@ -1353,12 +1362,12 @@ void displayLEDControl() {
   tft.setTextColor(TFT_WHITE);
   
   // Draw LED status
-  tft.drawString("Status:", 30, 100);
+  tft.drawString("Status:", 30, 220);
   tft.setTextColor(currentState ? TFT_GREEN : TFT_RED);
-  tft.drawString(currentState ? "ON" : "OFF", 120, 100);
+  tft.drawString(currentState ? "ON" : "OFF", 120, 220);
   
   // Initialize toggle button
-  mainMenuButtons[0].initButton(&tft, 120, 160, 160, 40, TFT_WHITE, 
+  mainMenuButtons[0].initButton(&tft, 120, 260, 160, 40, TFT_WHITE, 
     currentState ? TFT_RED : TFT_GREEN, 
     TFT_WHITE, 
     currentState ? ledOffLabel : ledOnLabel, 1);
@@ -1367,6 +1376,49 @@ void displayLEDControl() {
   // Redraw the back button
   screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
   screenButton.drawButton();
+
+  // Draw NeoPixel brightness slider
+  tft.setTextColor(TFT_CYAN);
+  tft.setFreeFont(LABEL2_FONT);
+  tft.setTextSize(0);
+    tft.drawString("Neopixel", 20, 20);
+  tft.drawString("Brightness", 30, 60);
+  tft.fillRect(95, 85, 70, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(int(neoPixelBrightness)) + "%", 100, 90);
+
+  // Create slider parameters
+  slider_t param;
+  
+  // Slider slot parameters
+  param.slotWidth = 10;
+  param.slotLength = 200;
+  param.slotColor = TFT_BLUE;
+  param.slotBgColor = TFT_YELLOW;
+  param.orientation = H_SLIDER;
+  
+  // Slider knob parameters
+  param.knobWidth = 20;
+  param.knobHeight = 30;
+  param.knobRadius = 5;
+  param.knobColor = TFT_WHITE;
+  param.knobLineColor = TFT_RED;
+   
+  // Slider range and movement
+  param.sliderLT = 10;
+  param.sliderRB = 100;
+  param.startPosition = neoPixelBrightness;
+  param.sliderDelay = 0;
+
+  // Draw the slider
+  slider2.drawSlider(20, 120, param);
+
+  int16_t x, y;    // x and y can be negative
+  uint16_t w, h;   // Width and height
+  slider2.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+  slider2.setSliderPosition(66);
+  slider2.setSliderPosition(neoPixelBrightness);
 }
 
 void displayFanControl(uint8_t fanIndex) {
@@ -1393,22 +1445,19 @@ void displayFanControl(uint8_t fanIndex) {
   param.sliderLT = 0;
   param.sliderRB = 100;
   param.sliderDelay = 0;
-  
-    int16_t x, y;
-    uint16_t w, h;
-    slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+
+  int16_t x, y;
+  uint16_t w, h;
+  slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
 
   SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
   
   for (int i = 0; i < 3; i++) {
     int yOffset = i * 90;  // Space between fan controls
-        
-        // Initialize slider position before drawing
-    param.startPosition = float(currentFanSpeeds[i]*100);
-
+    param.startPosition = currentFanSpeeds[i]*100;   
+    // Initialize slider position before drawing
     sliders[i]->drawSlider(20, 80 + yOffset, param);
     sliders[i]->setSliderPosition(currentFanSpeeds[i]);
-  
     // Draw current speed percentage
     tft.setTextColor(TFT_GREEN);
     tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
@@ -1448,7 +1497,7 @@ void displayFanControl(uint8_t fanIndex) {
         tft.drawLine(20, 20, 35, 35, TFT_BLACK);
         tft.drawLine(35, 20, 20, 35, TFT_BLACK);
       }
-      delay(250); // Debounce delay
+      delay(100); // Debounce delay
       continue;
     }
 
@@ -1457,18 +1506,20 @@ void displayFanControl(uint8_t fanIndex) {
         if (sliders[i]->checkTouch(t_x, t_y)) {
           delay(10); // Small delay for stable touch reading
           float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
+          delay(10); // Small delay for stable touch reading
           currentFanSpeeds[i] = fanSpeed;
           tft.fillRect(150, 40 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage
           tft.fillRect(150, 60 + (i * 90), 60, 20, TFT_BLACK);  // Clear previous percentage text area
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
-          saveFanSpeeds(currentFanSpeeds); // Save fan speeds after changes
+
 
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
               for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
+              delay(10); // Small delay for stable touch reading
               Fan_PWM[j]->setPWM(FAN1_PIN + j, fanFrequency, fanSpeed);
                            
               // Update percentage displays for all fans
@@ -1478,17 +1529,20 @@ void displayFanControl(uint8_t fanIndex) {
               tft.setTextColor(TFT_GREEN);
               tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 60 + yOffset);
               tft.setTextColor(TFT_WHITE);
+              saveFanSpeeds(currentFanSpeeds);
+            fanSpeed2=currentFanSpeeds[1] ;
             }
           } else {
               // Original single fan update code
               Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
-                            int yOffset = i * 90;
+              int yOffset = i * 90;
               tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
               tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
               tft.setTextColor(TFT_GREEN);
               tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
               tft.setTextColor(TFT_WHITE);
-            
+              saveFanSpeeds(currentFanSpeeds);
+              fanSpeed2=currentFanSpeeds[1] ;
 
             
             // If we're exiting the screen, force save
@@ -1836,4 +1890,3 @@ void displayInfoScreen() {
     tft.print("No I2C devices found");
   }
 }
-
