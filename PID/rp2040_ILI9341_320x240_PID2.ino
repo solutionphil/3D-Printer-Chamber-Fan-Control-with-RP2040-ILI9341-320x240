@@ -334,10 +334,9 @@ void saveFanSpeeds(float speeds[3]) {
 }
 
 void loadFanSpeeds(float speeds[3]) {
-
   // Initialize with default values
   for (int i = 0; i < 3; i++) {
-    speeds[i] = 0.0;
+    speeds[i] = 30.0; // Default fan speed
   }
   
   if (LittleFS.exists(FAN_SETTINGS_FILE)) {
@@ -355,9 +354,6 @@ void loadFanSpeeds(float speeds[3]) {
       Serial.println("Fan speeds loaded successfully");
     } else {
       Serial.println("Failed to open fan settings file for reading");
-              for (int i = 0; i < 3; i++) {
-              Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, 30);
-    }
     }
   }
 }
@@ -1454,7 +1450,7 @@ void displayFanControl(uint8_t fanIndex) {
   
   for (int i = 0; i < 3; i++) {
     int yOffset = i * 90;  // Space between fan controls
-    param.startPosition = currentFanSpeeds[i]*100;   
+    param.startPosition = Fan_PWM[i]->getActualDutyCycle();    
     // Initialize slider position before drawing
     sliders[i]->drawSlider(20, 80 + yOffset, param);
     sliders[i]->setSliderPosition(currentFanSpeeds[i]);
@@ -1466,8 +1462,6 @@ void displayFanControl(uint8_t fanIndex) {
     // Draw fan labels
     tft.drawString("Fan " + String(i + 1), 30, 60 + yOffset);
     
-    int16_t x, y;
-    uint16_t w, h;
     sliders[i]->getBoundingRect(&x, &y, &w, &h);
     tft.drawRect(x, y, w, h, TFT_DARKGREY);
   }
@@ -1513,10 +1507,9 @@ void displayFanControl(uint8_t fanIndex) {
           sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i+1, fanSpeed);
 
-
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
-              for (int j = 0; j < 3; j++) {
+            for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
               sliders[j]->setSliderPosition(fanSpeed);
               delay(10); // Small delay for stable touch reading
@@ -1530,25 +1523,19 @@ void displayFanControl(uint8_t fanIndex) {
               tft.drawString(String(int(currentFanSpeeds[j])) + "%", 150, 60 + yOffset);
               tft.setTextColor(TFT_WHITE);
               saveFanSpeeds(currentFanSpeeds);
-            fanSpeed2=currentFanSpeeds[1] ;
+              fanSpeed2 = currentFanSpeeds[1];
             }
           } else {
-              // Original single fan update code
-              Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
-              int yOffset = i * 90;
-              tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
-              tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
-              tft.setTextColor(TFT_GREEN);
-              tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
-              tft.setTextColor(TFT_WHITE);
-              saveFanSpeeds(currentFanSpeeds);
-              fanSpeed2=currentFanSpeeds[1] ;
-
-            
-            // If we're exiting the screen, force save
-            if (screenButton.justPressed())
+            // Original single fan update code
+            Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeed);
+            int yOffset = i * 90;
+            tft.fillRect(150, 40 + yOffset, 60, 20, TFT_BLACK);
+            tft.fillRect(150, 60 + yOffset, 60, 20, TFT_BLACK);  // Clear previous percentage text area
+            tft.setTextColor(TFT_GREEN);
+            tft.drawString(String(int(currentFanSpeeds[i])) + "%", 150, 60 + yOffset);
+            tft.setTextColor(TFT_WHITE);
             saveFanSpeeds(currentFanSpeeds);
-            fanSpeed2=currentFanSpeeds[1] ;
+            fanSpeed2 = currentFanSpeeds[1];
           }
         }
       }
