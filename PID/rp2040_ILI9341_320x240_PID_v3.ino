@@ -16,11 +16,13 @@
  *
  * Libraries:
  * - TFT_eSPI: For TFT display control
+ * - TFT_eWidget: For Sliders
  * - RP2040_PWM: For PWM-based brightness and fan speed control
  * - Adafruit_NeoPixel: For NeoPixel control
  * - Adafruit_BME280: For environmental sensing
  * - Adafruit_SGP40: For air quality sensing
  * - Wire: For I2C communication
+ * - QuickPID for PWM Control
  */
  
 #include <LittleFS.h>
