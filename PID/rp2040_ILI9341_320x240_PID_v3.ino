@@ -104,8 +104,6 @@ const unsigned long DEBOUNCE_DELAY = 100; // 100ms debounce time
 
 #define LED_STATE_FILE "/led_state.txt"
 
-
-
 // Sensor data structure
 struct SensorData {
     float temperature;
@@ -149,6 +147,7 @@ char backLabel[] = "Back";
 SliderWidget slider1 = SliderWidget(&tft, &knob);
 SliderWidget slider2 = SliderWidget(&tft, &knob);
 SliderWidget slider3 = SliderWidget(&tft, &knob);
+SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
 
 #define _PWM_LOGLEVEL_        1
 #define CALIBRATION_FILE "/TouchCalData1" // Calibration data file
@@ -195,7 +194,7 @@ const unsigned long SENSOR_UPDATE_INTERVAL = 2000; // 2 seconds
 RP2040_PWM* PWM_Instance;
 
 // Initialize PWM instance for brightness control
-float dutyCycle; //= 90;  // Default brightness value
+float dutyCycle ;//= 90;  // Default brightness value
 
 // PWM Fan Control
 #define FAN1_PIN 27
@@ -296,6 +295,7 @@ void loadBrightness(float &displayBrightness, float &neoPixelBrightness) {
       return;
     }
   }
+  else
   displayBrightness = 90.0; // Default display brightness if file doesn't exist
   neoPixelBrightness = 50.0; // Default NeoPixel brightness if file doesn't exist
 }
@@ -641,7 +641,6 @@ void loop(void) {
         }
     }
 
-    
   if (currentScreen == 0) {  // Main menu screen (System Info removed)
     for (uint8_t b = 0; b < 4; b++) {  // Adjusted loop to 4 buttons
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));  // Update button state
@@ -713,8 +712,7 @@ void loop(void) {
         tft.drawString(String(int(neoPixelBrightness)) + "%", 100, 90);
       }
     }
- } else if (currentScreen == 7) {
-    // Handle fan control screen
+     } else if (currentScreen == 7) {
     for (uint8_t b = 0; b < 3; b++) {
       mainMenuButtons[b].press(pressed && mainMenuButtons[b].contains(t_x, t_y));
       if (mainMenuButtons[b].justPressed()) {
@@ -738,21 +736,23 @@ void loop(void) {
       delay(100); // Debounce delay
     }
 
+    SliderWidget* sliders[] = {&slider1, &slider2, &slider3};
+    
     if (pressed) {
       for (int i = 0; i < 3; i++) {
-        if (slider1.checkTouch(t_x, t_y) || slider2.checkTouch(t_x, t_y) || slider3.checkTouch(t_x, t_y)) {
+        if (sliders[i]->checkTouch(t_x, t_y)) {
           delay(10); // Small delay for stable touch reading
-          float fanSpeed = min(100.0, max(0.0, round(slider1.getSliderPosition() / 10.0) * 10.0));
+          float fanSpeed = min(100.0, max(0.0, round(sliders[i]->getSliderPosition() / 10.0) * 10.0));
           delay(10); // Small delay for stable touch reading
           currentFanSpeeds[i] = fanSpeed;
-          slider1.setSliderPosition(fanSpeed); // Update slider position to snapped value
+          sliders[i]->setSliderPosition(fanSpeed); // Update slider position to snapped value
           Serial.printf("Updating Fan %d to %.1f%%\n", i + 1, fanSpeed);
 
           // If sync is enabled, update all fans
           if (fanSyncEnabled) {
             for (int j = 0; j < 3; j++) {
               currentFanSpeeds[j] = fanSpeed;
-              slider1.setSliderPosition(fanSpeed);
+              sliders[j]->setSliderPosition(fanSpeed);
               delay(10); // Small delay for stable touch reading
               Fan_PWM[j]->setPWM(FAN1_PIN + j, fanFrequency, fanSpeed);
 
@@ -777,20 +777,6 @@ void loop(void) {
             fanSpeed2 = currentFanSpeeds[1];
           }
         }
-      }
-    }
-
-    screenButton.press(pressed && screenButton.contains(t_x, t_y));
-    if (screenButton.justReleased()) screenButton.drawButton();
-
-    // Switch to the settings screen when the button is pressed
-    if (screenButton.justPressed()) {
-      unsigned long currentTime = millis();
-      if (currentTime - lastButtonPress >= DEBOUNCE_DELAY) {
-        lastButtonPress = currentTime;
-        currentScreen = 0;
-        displayScreen(currentScreen);
-        return;
       }
     }
   } else if (currentScreen == 2) {
