@@ -1,7 +1,7 @@
  /* Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
- * Date: 02/04/2025
+ * Date: 02/05/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
@@ -36,8 +36,12 @@
 
 //For DIM Display
 unsigned long lastActivityTime = 0;
-unsigned long inactivityThreshold = 13000; //10sec
-unsigned long inactivityThreshold2 = 26000; //10sec
+unsigned long inactivityThresholds[] = {0, 3000, 5000, 10000, 15000, 20000, 30000, 60000, 120000, 180000, 300000, 600000, 1200000, 1800000};
+unsigned long inactivityFactors[] = {0, 1, 2, 3, 4, 5, 10, 20, 50, 100};
+unsigned long inactivityThreshold = 3000; //10sec
+unsigned long inactivityThreshold2 =  6000; //20sec
+float dimHelper1 = 3; //10sec
+float dimHelper2 = 1; //1x
 bool isDimmed = false;
 bool isOFF = false;
 float neoPixelBrightness = 50.0; // Default NeoPixel brightness value
@@ -545,18 +549,17 @@ void checkDim() {
   }
 
   // Check if the inactivity threshold has been reached and dim the display
-  if (millis() - lastActivityTime > inactivityThreshold && !isDimmed && dutyCycle >= 30) {
+  if (millis() - lastActivityTime > inactivityThreshold && !isDimmed && dutyCycle >= 30 && !inactivityThreshold==0) {
     dutyCycle = 30;
     PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
     isDimmed = true;
     Serial.println("DIMMED BRIGHTNESS");
   } 
   // Check if the extended inactivity threshold has been reached and turn off the display
-  else if (millis() - lastActivityTime > inactivityThreshold2 && isDimmed) {
+  else if (millis() - lastActivityTime > inactivityThreshold2 && isDimmed && !inactivityThreshold==0) {
     dutyCycle = 0;
     PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
     isOFF = true;
-    Serial.println("BRIGHTNESS OFF");
   }
 }
 
@@ -801,6 +804,55 @@ void loop(void) {
         tft.setTextColor(TFT_GREEN);
         tft.drawString(String(int(dutyCycle)) + "%", 100, 65);
       }
+      if (slider2.checkTouch(t_x, t_y)) {     
+      dimHelper1 = slider2.getSliderPosition();
+      slider2.setSliderPosition(dimHelper1);
+      inactivityThreshold = inactivityThresholds[(int)dimHelper1];
+      inactivityThreshold2 = inactivityThreshold * inactivityThresholds[(int)dimHelper2];
+      Serial.print("Inactivity Threshold: ");
+      Serial.println(inactivityThreshold);
+       //slider2&3
+       // Update percentage display
+       tft.fillRect(90, 140, 80, 30, TFT_BLACK);
+       tft.fillRect(90, 210, 150, 30, TFT_BLACK);
+       tft.setTextColor(TFT_GREEN);
+
+       if((inactivityThreshold/1000)>60 || (inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) >60 ){
+         tft.drawString(String(inactivityThreshold/60000) + " min", 100, 145);
+         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 60000) + " min", 150, 215);
+        }
+        else
+        {
+         tft.drawString(String(inactivityThreshold/1000) + " sec", 100, 145);
+         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
+        }
+        tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
+      }
+      if (slider3.checkTouch(t_x, t_y)) {
+      dimHelper2 = slider3.getSliderPosition();
+      slider3.setSliderPosition(dimHelper2);
+      inactivityThreshold2 = inactivityFactors[(int)dimHelper2] * inactivityThreshold;
+      Serial.print("Inactivity Factor: ");
+      Serial.println(inactivityThreshold2);
+      Serial.println(inactivityFactors[(int)dimHelper2]);
+        //slider2&3
+       // Update percentage display
+       tft.fillRect(90, 140, 80, 30, TFT_BLACK);
+       tft.fillRect(90, 210, 150, 30, TFT_BLACK);
+       tft.setTextColor(TFT_GREEN);
+       
+       if((inactivityThreshold/1000)>60 || (inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) >60 ){
+         tft.drawString(String(inactivityThreshold/60000) + " min", 100, 145);
+         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 60000) + " min", 150, 215);
+        }
+        else
+        {
+         tft.drawString(String(inactivityThreshold/1000) + " sec", 100, 145);
+         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
+        }
+        tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
+
+      }
     }
   }
 
@@ -808,7 +860,6 @@ void loop(void) {
   if(currentScreen!=0){
     screenButton.press(pressed && screenButton.contains(t_x, t_y));
     if (screenButton.justReleased()) screenButton.drawButton();
-
     // Switch to the next screen when the button is pressed
       if (screenButton.justPressed()) {
         unsigned long currentTime = millis();
@@ -860,14 +911,12 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
   }else if (isPID) {
     fillRadius = round(61 * scale);  // Increased fill radius for PID
     innerRadius = round(56 * scale); // Adjusted inner radius
-  
-  }
+    }
   // Draw outer circle with anti-aliasing
   sprite->drawCircle(x, y, outerRadius, TFT_WHITE);
   for(int i = round(59 * scale); i >= round(58 * scale); i--) {
     sprite->drawCircle(x, y, i, TFT_DARKGREY);
   }
-
   // Draw tick marks only for non-VOC gauges
   if (!isVOC) {
     int radius = round(58 * scale);
@@ -898,7 +947,6 @@ void drawGaugeToSprite(TFT_eSprite* sprite, int x, int y, float min_val, float m
 
   int fillEnd = round(42 * scale);
 
-  
   // Draw filled arc with smoother gradient and anti-aliasing
   for (int r = fillStart; r >= fillEnd; r--) {
     float stepSize = 0.01; // Smaller step size for smoother arc
@@ -1047,10 +1095,10 @@ void drawMainMenu() {
   menuSprite.print("Main Menu");
   menuSprite.setFreeFont(LABEL2_FONT);
 
-mainMenuLabel[0]="Fan Control";
-mainMenuLabel[1]="AQI and Temp";
-mainMenuLabel[2]="PID Control";
-mainMenuLabel[3]="Settings";
+  mainMenuLabel[0]="Fan Control";
+  mainMenuLabel[1]="AQI and Temp";
+  mainMenuLabel[2]="PID Control";
+  mainMenuLabel[3]="Settings";
 
   // Initialize buttons with menuSprite instead of tft
   mainMenuButtons[0].initButton(&menuSprite, 120, 100, 220, 40, TFT_WHITE, TFT_BLUE, TFT_WHITE,(char*)"", 1); // Replaced Screen 1 with Fans
@@ -1099,6 +1147,7 @@ void displayPID() {
             dBar.createSprite(barWidth, barHeight);
             dBar.setColorDepth(8);
     }
+
 // For the PID Bars
   tft.drawRect(barX-21, barY-1, barWidth*6+2, barHeight+2, TFT_WHITE);
   tft.setTextColor(TFT_WHITE);
@@ -1125,7 +1174,6 @@ void displayPID() {
     // Draw back button
     screenButton.initButton(&tft, 200, 20, 60, 30, TFT_WHITE, TFT_BLUE, TFT_WHITE, backButtonLabel, 1);
     screenButton.drawButton();
-
 
     // Initial draw of PID values
     updatePIDDisplay(true);
@@ -1191,8 +1239,7 @@ void updatePIDDisplay(bool forceRedraw) {
         gauge4.pushSprite(5, 45);
         lastTemp = temp;
         myPID.Compute();
-
-    }
+      }
 
     // Update duty cycle gauge
     if (lastFanSpeed != fanSpeed2 || forceRedraw) {
@@ -1272,7 +1319,7 @@ void updatePIDDisplay(bool forceRedraw) {
         Serial.println(myPID.GetPterm());
         Serial.println(myPID.GetIterm());
         Serial.println(myPID.GetDterm());
-    }
+      }
 }
 
 void displayBGBrightness() {
@@ -1295,6 +1342,17 @@ void displayBGBrightness() {
   tft.fillRect(90, 110, 80, 30, TFT_BLACK);
   tft.setTextColor(TFT_GREEN);
   tft.drawString(String(int(dutyCycle)) + "%", 100, 65);
+
+  //slider2&3
+    // Update percentage display
+  tft.fillRect(90, 140, 80, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(dimHelper1) + "sec", 100, 145);
+
+    // Update percentage display
+  tft.fillRect(90, 210, 80, 30, TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.drawString(String(int(dimHelper2)) + "x", 100, 215);
 
   // Create slider parameters
   slider_t param;
@@ -1327,6 +1385,34 @@ void displayBGBrightness() {
   uint16_t w, h;   // Width and height
   slider1.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
   tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+
+////SLIDER 2&3
+  // Slider range and movement
+  param.sliderLT = 0;
+  param.sliderRB = 13;
+  param.startPosition = 5;
+  param.sliderDelay = 0;
+
+    // Draw the slider for seconds
+  slider2.drawSlider(20, 170, param);
+  slider2.setSliderPosition(50);
+  slider2.setSliderPosition(dimHelper1);
+  slider2.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+
+    // Slider range and movement
+  param.sliderLT = 0;
+  param.sliderRB = 9;
+  param.startPosition = 5;
+  param.sliderDelay = 0;
+
+    // Draw the slider for factor
+  slider3.drawSlider(20, 240, param);
+  slider3.setSliderPosition(66);
+  slider3.setSliderPosition(dimHelper2);
+  slider3.getBoundingRect(&x, &y, &w, &h);     // Update x,y,w,h with bounding box
+  tft.drawRect(x, y, w, h, TFT_DARKGREY); // Draw rectangle outline
+
 
 
 }
