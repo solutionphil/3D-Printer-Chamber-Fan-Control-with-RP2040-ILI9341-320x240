@@ -42,7 +42,7 @@ unsigned long inactivityThresholds[] = {0, 3000, 5000, 10000, 15000, 20000, 3000
 unsigned long inactivityFactors[] = {0, 1, 2, 3, 4, 5, 10, 20, 50, 100};
 unsigned long inactivityThreshold = 3000; //10sec
 unsigned long inactivityThreshold2 =  6000; //20sec
-float dimHelper1 = 3; //10sec
+float dimHelper1 = 3; //15sec
 float dimHelper2 = 1; //1x
 bool isDimmed = false;
 bool isOFF = false;
@@ -299,8 +299,10 @@ void loadBrightness(float &displayBrightness, float &neoPixelBrightness, float &
       neoPixelBrightness = val.toFloat();
       val = f.readStringUntil('\n');
       dimHelper1 = val.toFloat();
+      inactivityThreshold = inactivityThresholds[(int)dimHelper1];
       val = f.readStringUntil('\n');
       dimHelper2 = val.toFloat();
+      inactivityThreshold2 = inactivityFactors[(int)dimHelper2] * inactivityThreshold;
       f.close();
       return;
     }
@@ -308,7 +310,9 @@ void loadBrightness(float &displayBrightness, float &neoPixelBrightness, float &
   displayBrightness = 90.0; // Default display brightness if file doesn't exist
   neoPixelBrightness = 50.0; // Default NeoPixel brightness if file doesn't exist
   dimHelper1 = 3; // Default dimHelper1 value
+  inactivityThreshold = inactivityThresholds[(int)dimHelper1];
   dimHelper2 = 1; // Default dimHelper2 value
+  inactivityThreshold2 = inactivityFactors[(int)dimHelper2] * inactivityThreshold;
 }
 
 void saveLEDState(bool state) {
@@ -443,6 +447,31 @@ void LoadnSetFanSpeeds(){
     Fan_PWM[i]->setPWM(FAN1_PIN + i, fanFrequency, fanSpeeds[i]);
   }
 }
+void displayTime(unsigned long timeInMs, int x, int y) {
+  unsigned long seconds = timeInMs / 1000;
+  unsigned long minutes = seconds / 60;
+  unsigned long hours = minutes / 60;
+  unsigned long remainingMinutes = minutes % 60;
+  unsigned long remainingSeconds = seconds % 60;
+
+  if (hours > 0) {
+    if (remainingMinutes > 0 || remainingSeconds > 0) {
+      tft.drawString(String(hours) + " h " + String(remainingMinutes) + " min " , x, y);
+    }   
+    else {
+      tft.drawString(String(hours) + " h", x, y);
+    }
+   }else if (minutes > 0) {
+    if (remainingSeconds > 0) {
+      tft.drawString(String(minutes) + " min " + String(remainingSeconds) + " sec", x, y);
+    } else {
+      tft.drawString(String(minutes) + " min", x, y);
+    }
+  } else {
+    tft.drawString(String(seconds) + " sec", x, y);
+  }
+}
+
 
 void setup() {
   // Initialize serial communication for debugging
@@ -804,61 +833,48 @@ void loop(void) {
         tft.setTextColor(TFT_GREEN);
         tft.drawString(String(int(dutyCycle)) + "%", 100, 65);
       }
-      if (slider2.checkTouch(t_x, t_y)) {     
-      dimHelper1 = slider2.getSliderPosition();
-      slider2.setSliderPosition(dimHelper1);
-      inactivityThreshold = inactivityThresholds[(int)dimHelper1];
-      inactivityThreshold2 = inactivityThreshold * inactivityThresholds[(int)dimHelper2];
-      Serial.print("Inactivity Threshold: ");
-      Serial.println(inactivityThreshold);
-       //slider2&3
-       // Update percentage display
-       tft.fillRect(90, 140, 80, 30, TFT_BLACK);
-       tft.fillRect(90, 210, 150, 30, TFT_BLACK);
-       tft.setTextColor(TFT_GREEN);
-       
-       if((inactivityThreshold/1000)>60 || (inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) >60 ){
-         tft.drawString(String(inactivityThreshold/60000) + " min", 100, 145);
-         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 60000) + " min", 150, 215);
-        }
-        else
-        {
-         tft.drawString(String(inactivityThreshold/1000) + " sec", 100, 145);
-         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
-        }
-        tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
-        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
-      }
+       // Check touch for slider2
+  if (slider2.checkTouch(t_x, t_y)) {     
+    dimHelper1 = slider2.getSliderPosition();
+    slider2.setSliderPosition(dimHelper1);
+    inactivityThreshold = inactivityThresholds[(int)dimHelper1];
+    inactivityThreshold2 = inactivityThreshold * inactivityThresholds[(int)dimHelper2];
 
-      if (slider3.checkTouch(t_x, t_y)) {
-      dimHelper2 = slider3.getSliderPosition();
-      slider3.setSliderPosition(dimHelper2);
-      inactivityThreshold2 = inactivityFactors[(int)dimHelper2] * inactivityThreshold;
-      Serial.print("Inactivity Factor: ");
-      Serial.println(inactivityThreshold2);
-      Serial.println(inactivityFactors[(int)dimHelper2]);
-        //slider2&3
-        // Update percentage display
-       tft.fillRect(90, 140, 80, 30, TFT_BLACK);
-       tft.fillRect(90, 210, 150, 30, TFT_BLACK);
-       tft.setTextColor(TFT_GREEN);
-       
-       if((inactivityThreshold/1000)>60 || (inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) >60 ){
-         tft.drawString(String(inactivityThreshold/60000) + " min", 100, 145);
-         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 60000) + " min", 150, 215);
-        }
-        else
-        {
-         tft.drawString(String(inactivityThreshold/1000) + " sec", 100, 145);
-         tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
-        }
-        tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
-   
-        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
-      }
-    }
+    Serial.print("Inactivity Threshold: ");
+    Serial.println(inactivityThreshold);
+
+    // Update percentage display
+    tft.fillRect(90, 140, 80, 30, TFT_BLACK);
+    tft.fillRect(45, 210, 195, 30, TFT_BLACK);
+    tft.setTextColor(TFT_GREEN);
+
+    displayTime(inactivityThreshold, 100, 145);
+    displayTime(inactivityFactors[(int)dimHelper2] * inactivityThreshold, 110, 215);
+    tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 50, 215);
+    saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
   }
 
+  // Check touch for slider3
+  if (slider3.checkTouch(t_x, t_y)) {
+    dimHelper2 = slider3.getSliderPosition();
+    slider3.setSliderPosition(dimHelper2);
+    inactivityThreshold2 = inactivityFactors[(int)dimHelper2] * inactivityThreshold;
+
+    Serial.print("Inactivity Factor: ");
+    Serial.println(inactivityThreshold2);
+    Serial.println(inactivityFactors[(int)dimHelper2]);
+
+    // Update percentage display
+    tft.fillRect(45, 210, 195, 30, TFT_BLACK);
+    tft.setTextColor(TFT_GREEN);
+
+    displayTime(inactivityFactors[(int)dimHelper2] * inactivityThreshold, 110, 215);
+    tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 50, 215);
+    saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
+  }
+    }}
+
+    
   // Check for touch on the screen switch button
   if(currentScreen!=0){
     screenButton.press(pressed && screenButton.contains(t_x, t_y));
@@ -1348,14 +1364,9 @@ void displayBGBrightness() {
 
   //slider2&3
     // Update percentage display
-  tft.fillRect(90, 140, 80, 30, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
-  tft.drawString(String(dimHelper1) + "sec", 100, 145);
-
-    // Update percentage display
-  tft.fillRect(90, 210, 80, 30, TFT_BLACK);
-  tft.setTextColor(TFT_GREEN);
-  tft.drawString(String(int(dimHelper2)) + "x", 100, 215);
+    displayTime(inactivityThreshold, 100, 145);
+    displayTime(inactivityFactors[(int)dimHelper2] * inactivityThreshold, 110, 215);
+    tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 50, 215);
 
   // Create slider parameters
   slider_t param;
