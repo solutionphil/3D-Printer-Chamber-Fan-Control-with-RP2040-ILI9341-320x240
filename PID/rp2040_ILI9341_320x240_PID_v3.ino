@@ -1,7 +1,7 @@
  /* Program Name: RP2040 TFT Touch UI with PWM Brightness Control
  * Version: 1.0
  * Author: Solutionphil
- * Date: 02/05/2025
+ * Date: 02/06/2025
  *
  * Description:
  * This program is designed for the RP2040 microcontroller to interface with an ILI9341 TFT display.
@@ -274,16 +274,22 @@ void cleanupSprites() {
     Serial.printf("Free RAM after cleanup: %d bytes\n", rp2040.getFreeHeap());
 }
 
-void saveBrightness(float displayBrightness, float neoPixelBrightness) {
+void saveBrightness(float displayBrightness, float neoPixelBrightness, float dimHelper1, float dimHelper2) {
   File f = LittleFS.open(BRIGHTNESS_FILE, "w");
   if (f) {
     f.println(displayBrightness);
     f.println(neoPixelBrightness);
+    f.println(dimHelper1);
+    f.println(dimHelper2);
     f.close();
   }
 }
 
-void loadBrightness(float &displayBrightness, float &neoPixelBrightness) {
+
+
+
+
+void loadBrightness(float &displayBrightness, float &neoPixelBrightness, float &dimHelper1, float &dimHelper2) {
   if (LittleFS.exists(BRIGHTNESS_FILE)) {
     File f = LittleFS.open(BRIGHTNESS_FILE, "r");
     if (f) {
@@ -291,13 +297,18 @@ void loadBrightness(float &displayBrightness, float &neoPixelBrightness) {
       displayBrightness = val.toFloat();
       val = f.readStringUntil('\n');
       neoPixelBrightness = val.toFloat();
+      val = f.readStringUntil('\n');
+      dimHelper1 = val.toFloat();
+      val = f.readStringUntil('\n');
+      dimHelper2 = val.toFloat();
       f.close();
       return;
     }
   }
-  else
   displayBrightness = 90.0; // Default display brightness if file doesn't exist
   neoPixelBrightness = 50.0; // Default NeoPixel brightness if file doesn't exist
+  dimHelper1 = 3; // Default dimHelper1 value
+  dimHelper2 = 1; // Default dimHelper2 value
 }
 
 void saveLEDState(bool state) {
@@ -480,7 +491,7 @@ void setup() {
   delay(100); // Small delay for stable initialization
 
   // Load saved brightness
-  loadBrightness(dutyCycle, neoPixelBrightness);
+  loadBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);
   
   // Load saved LED state
   neopixelState = loadLEDState();
@@ -541,7 +552,7 @@ void checkDim() {
       t_x = 0;
       t_y = 0;
       delay(20);
-      loadBrightness(dutyCycle, neoPixelBrightness);
+      loadBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);
       Serial.println("RECOVER BRIGHTNESS");
       PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
       isDimmed = false;
@@ -706,7 +717,7 @@ void loop(void) {
         slider2.setSliderPosition(neoPixelBrightness);
         pixels.setBrightness(neoPixelBrightness);
         pixels.show();
-        saveBrightness(dutyCycle, neoPixelBrightness);
+        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);
           tft.fillRect(95, 85, 70, 30, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
         tft.drawString(String(int(neoPixelBrightness)) + "%", 100, 90);
@@ -786,7 +797,8 @@ void loop(void) {
         dutyCycle = round(slider1.getSliderPosition() / 10.0) * 10.0; // Snap to nearest 10% increment
         slider1.setSliderPosition(dutyCycle); // Update slider position to snapped value
         PWM_Instance->setPWM(pinToUse, frequency, dutyCycle);
-        saveBrightness(dutyCycle, neoPixelBrightness);  // Save the new brightness value
+        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
+        
         // Update percentage display
         tft.fillRect(90, 55, 80, 25, TFT_BLACK);
         tft.setTextColor(TFT_GREEN);
@@ -804,7 +816,7 @@ void loop(void) {
        tft.fillRect(90, 140, 80, 30, TFT_BLACK);
        tft.fillRect(90, 210, 150, 30, TFT_BLACK);
        tft.setTextColor(TFT_GREEN);
-
+       
        if((inactivityThreshold/1000)>60 || (inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) >60 ){
          tft.drawString(String(inactivityThreshold/60000) + " min", 100, 145);
          tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 60000) + " min", 150, 215);
@@ -815,7 +827,9 @@ void loop(void) {
          tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
         }
         tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
+        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
       }
+
       if (slider3.checkTouch(t_x, t_y)) {
       dimHelper2 = slider3.getSliderPosition();
       slider3.setSliderPosition(dimHelper2);
@@ -824,7 +838,7 @@ void loop(void) {
       Serial.println(inactivityThreshold2);
       Serial.println(inactivityFactors[(int)dimHelper2]);
         //slider2&3
-       // Update percentage display
+        // Update percentage display
        tft.fillRect(90, 140, 80, 30, TFT_BLACK);
        tft.fillRect(90, 210, 150, 30, TFT_BLACK);
        tft.setTextColor(TFT_GREEN);
@@ -839,7 +853,8 @@ void loop(void) {
          tft.drawString(String(inactivityFactors[(int)dimHelper2] * inactivityThreshold / 1000) + " sec", 150, 215);
         }
         tft.drawString(String(inactivityFactors[(int)dimHelper2]) + "x", 100, 215);
-
+   
+        saveBrightness(dutyCycle, neoPixelBrightness, dimHelper1, dimHelper2);  // Save the new brightness value
       }
     }
   }
