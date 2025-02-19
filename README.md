@@ -77,7 +77,7 @@ For a visual representation of the wiring, refer to the [wiring diagram](https:/
 
 ### Software Setup
 1. **Install the required libraries** in the Arduino IDE 2.x.
-2. **Install the RP2040 board** in the Arduino IDE 2.x Boardmanager.
+2. **Install the RP2040 board**(Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III) in the Arduino IDE 2.x Boardmanager.
 3. **Copy the files** from the TFT_eSPI folder to your Arduino IDE working folder into `/libraries/TFT_eSPI`.
 4. **Download and open** the *.INO file in your Arduino IDE.
 5. **Compile and upload** the code. For the first upload, press reset+boot and release the reset button. Your RP2040 Zero should be detected as a new drive in your operating system.
