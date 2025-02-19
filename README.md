@@ -67,6 +67,9 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
         - Adafruit BME280
         - Adafruit SGP40
 
+## Diagram
+For a visual representation of the wiring, refer to the [wiring diagram](https://www.mermaidchart.com/raw/80084e9d-4179-43a7-a02a-414e01cb094a?theme=light&version=v0.1&format=svg).
+
 ### Software Setup
 1. **Install the required libraries** in the Arduino IDE 2.x.
 2. **Install the RP2040 board** in the Arduino IDE 2.x Boardmanager.
@@ -74,7 +77,3 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 4. **Download and open** the *.INO file in your Arduino IDE.
 5. **Compile and upload** the code. For the first upload, press reset+boot and release the reset button. Your RP2040 Zero should be detected as a new drive in your operating system.
 6. **Enjoy!** :)
-
----
-
-Feel free to customize this further to better fit your needs.
