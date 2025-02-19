@@ -29,6 +29,11 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 - **TFT_eSPI**: For TFT display control (by Bodmer)
 - **TFT_eWidget**: For Slider Control (by Bodmer)
 - **RP2040_PWM**: For PWM-based brightness control (by Khoi Hoang)
+- **Adafruit_NeoPixel
+- **Adafruit_BME280
+- **Adafruit_SGP40
+- **Wire
+- **QuickPID
 
 ## Instructions
 
