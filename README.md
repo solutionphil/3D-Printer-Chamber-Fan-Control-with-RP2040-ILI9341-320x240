@@ -8,15 +8,17 @@
 This project leverages the RP2040 microcontroller to interface with an ILI9341 TFT display, creating a touch-based UI with multiple screens, PWM-based brightness control, and a file explorer using LittleFS. Key features include touch calibration, slider-based brightness adjustment, and file management.
 
 ## Features
-- **Touch-based UI** with multiple screens
+- **Touch-based UI** with multiple menu screens
 - **PWM-based brightness control**
 - **File explorer** using LittleFS
 - **Touch calibration**
 - **Slider-based brightness adjustment**
 - **File management**
+- **MANUAL slider based FAN control**
 - **PID FAN control**
 - **Temperature and VOC measurement**
 - **Configurable display dim**
+- **Autosave and load for changed values**
 
 ## Hardware Requirements
 - **RP2040 ZERO microcontroller** (Arduino IDE Boardmanager: Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III)
@@ -34,6 +36,7 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 1. **Wire your RP2040 Zero** with the ILI9341 240x320 display as follows:
 
     - **ILI9341 TFT Display Pins:**
+        - PIN 7 (LED): Backlight Brightness Control 
         - Pin 6 (RST): Reset
         - Pin 5 (TFT_CS and CSn): Chip Select
         - Pin 4 (DC): Data/Command
@@ -42,26 +45,23 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
         - Pin 1 (CS): Chip Select
         - Pin 0 (T_D0 and MISO): Master In Slave Out
 
-    - **PWM for Brightness Control:**
-        - PWM Pin 7
-
     - **PWM for Fan Control:**
         - FAN1_PIN 27
         - FAN2_PIN 28
         - FAN3_PIN 29
 
     - **NeoPixel:**
-        - NEOPIXEL_PIN 16
+        - ONBOARD RP2040 NEOPIXEL LED on PIN16
 
     - **I2C Pins:**
         - I2C0 SDA 8
         - I2C0 SCL 9
-        - I2C1 SDA 10
-        - I2C1 SCL 11
+        - I2C1 SDA 10 (not used yet)
+        - I2C1 SCL 11 (not used yet)
 
     - **UART Pins:**
-        - UART TX 12
-        - UART RX 13
+        - UART TX 12 (not used yet)
+        - UART RX 13 (not used yet)
 
     - **Environmental Sensors (Connected to I2C0):**
         - Adafruit BME280
