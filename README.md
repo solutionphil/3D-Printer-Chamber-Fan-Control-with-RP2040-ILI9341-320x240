@@ -1,4 +1,4 @@
-# RP2040 TFT Touch UI with PWM Brightness Control
+# RP2040 TFT Touch UI with PID PWM FAN CONTROL
 
 ## Version: 1.0
 **Author**: Solutionphil  
