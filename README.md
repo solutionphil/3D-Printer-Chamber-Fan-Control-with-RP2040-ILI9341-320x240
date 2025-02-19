@@ -5,7 +5,7 @@
 **Date**: February 19th, 2025
 
 ## Description
-This project leverages the RP2040 microcontroller to interface with an ILI9341 TFT display, creating a touch-based UI with multiple screens, PWM-based brightness control, and a file explorer using LittleFS. Key features include touch calibration, slider-based brightness adjustment, and file management.
+This project leverages the RP2040 microcontroller to interface with an ILI9341 TFT display, creating a touch-based UI with multiple screens, PWM-based FAN and brightness control, PID Control, Air Quality measurement, Temperature and Humidity measurement and a file explorer using LittleFS. Key features include touch calibration, slider-based brightness adjustment, and file management.
 
 ## Features
 - **Touch-based UI** with multiple menu screens
@@ -17,8 +17,9 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 - **MANUAL slider based FAN control**
 - **PID FAN control**
 - **Temperature and VOC measurement**
-- **Configurable display dim**
+- **Configurable display dimming and turning off**
 - **Autosave and load for changed values**
+- **System Info Screen**
 
 ## Hardware Requirements
 - **RP2040 ZERO microcontroller** (Arduino IDE Boardmanager: Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III)
