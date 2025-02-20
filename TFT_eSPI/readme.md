@@ -1,5 +1,5 @@
-** These Files are necessary to change for RP2040 / ILI9341. (Located in your Arduino IDE 2.x working Folder. It´s by default on Win11 machines at: C:\Users\YOUR_NAME\Documents\Arduino\libraries\TFT_eSPI ). <br/>
-** See the PIN Configuration in RP2040_ILI9341_Touch.h or here:<br/><br/>
+** These Files are necessary to change for RP2040 / ILI9341. (Located in your Arduino IDE 2.x working Folder. It´s by default on Win11 machines at: C:\Users\YOUR_NAME\Documents\Arduino\libraries\TFT_eSPI ).** <br/>
+** See the PIN Configuration in RP2040_ILI9341_Touch.h or here:**<br/><br/>
 // Typical setup for the RP2040 ZERO is :<br/>
 // Display PINS:<br/>
 // Display SDO/MISO  to RP2040 pin D0 (or leave disconnected if not reading TFT)<br/>
