@@ -1,8 +1,8 @@
 
+# Lets get started...
 
 
-
-##**TFT_eSPI Folder**
+## TFT_eSPI Folder
 
 These files need to be copied to your Arduino working folder to ensure RP2040 / ILI9341 compatibility. You can find them typically located at:
 ```
@@ -12,7 +12,7 @@ C:\Users\YOUR_NAME\Documents\Arduino\libraries\TFT_eSPI\
 Alternatively, you can rename the file to `User_Setup.h` and copy it into the folder. However, be aware that your settings may be lost during a library update.
 
 
-##**Pin Configuration:**
+## Pin Configuration:
 
 **Display Pins:**
 - SDO/MISO: RP2040 pin D0 (or leave disconnected if not reading TFT)
@@ -32,5 +32,5 @@ Alternatively, you can rename the file to `User_Setup.h` and copy it into the fo
 - T_CS: RP2040 pin D5 (can use another pin if desired, or GND, see below)
 - T_CLK: RP2040 pin D1 (must be the same as Display CS)
 
-##**Wire Diagram**<br>
+## Wire Diagram
 Show how to wire the ILI9341, RP2040, SGP40 and BME280 together
