@@ -1,4 +1,4 @@
-# RP2040 TFT Touch UI with PID PWM FAN CONTROL
+# RP2040 ILI9341 TFT Touch UI with PID PWM FAN CONTROL
 
 ## Version: 1.0
 **Author**: Solutionphil  
