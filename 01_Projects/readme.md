@@ -1,21 +1,20 @@
-**Here are the different project files**  
-**There are step by step expansions until the final shape**  
-**Feel free to choose what suits your needs**  
+## Project Files Overview
 
-**00_Basic Menu**  
-Simple Menu to check if the RP2040 is working with the ILI9341 display  
+Explore the various project files, each representing a step-by-step expansion towards the final design. Feel free to choose what suits your needs.
 
-**01_Basic with Neopixel**  
-Added Neopixel functionality for the on board LED  
+### 00_Basic Menu
+A simple menu to check if the RP2040 is working with the ILI9341 display.
 
-**02_PWM FAN Control**  
-Added manual control for 3 PWM FANS  
+### 01_Basic with Neopixel
+Added Neopixel functionality for the onboard LED.
 
-**03_TEMP_VOC**  
-Added temperature, humidity and VOC measurement  
+### 02_PWM FAN Control
+Added manual control for 3 PWM fans.
 
-**04_PID_Control**  
-Added PID Control for the PWM Fans with the help of temperature  
+### 03_TEMP_VOC
+Added temperature, humidity, and VOC measurement.
 
-**All stages include additional improvements of the UI and also features stuff like e.g. more functions under System Info**
+### 04_PID Control
+Added PID control for the PWM fans based on temperature.
 
+Each stage includes additional UI improvements and features like more functions under System Info.
