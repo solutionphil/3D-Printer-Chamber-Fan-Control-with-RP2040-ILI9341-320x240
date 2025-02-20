@@ -78,7 +78,7 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
         - Adafruit SGP40
 
 ## Diagram
-For a visual representation of the wiring, refer to the [wiring diagram](https://www.mermaidchart.com/raw/80084e9d-4179-43a7-a02a-414e01cb094a?theme=light&version=v0.1&format=svg](https://www.mermaidchart.com/raw/80084e9d-4179-43a7-a02a-414e01cb094a?theme=light&version=v0.1&format=svg).
+For a visual representation of the wiring, refer to the [wiring diagram](https://www.mermaidchart.com/raw/80084e9d-4179-43a7-a02a-414e01cb094a?theme=light&version=v0.1&format=svg).
 
 ### Software Setup
 1. **Install the required libraries** in the Arduino IDE 2.x.
