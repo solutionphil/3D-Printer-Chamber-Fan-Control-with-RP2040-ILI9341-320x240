@@ -87,3 +87,14 @@ For a visual representation of the wiring, refer to the [wiring diagram](https:/
 4. **Download and open** the *.INO file in your Arduino IDE.
 5. **Compile and upload** the code. For the first upload, press reset+boot and release the reset button. Your RP2040 Zero should be detected as a new drive in your operating system.
 6. **Enjoy!** :)
+7. 
+
+
+
+## Disclaimer
+
+Working with electricity and electronic components can be dangerous. Always ensure you take the necessary safety precautions when handling electrical devices.
+
+This software and associated documentation are provided "as is" without warranty of any kind, either express or implied, including but not limited to the implied warranties of merchantability and fitness for a particular purpose. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+
+Use this software at your own risk. The authors are not responsible for any damage to your equipment, personal injury, or any other consequences resulting from the use of this software.
