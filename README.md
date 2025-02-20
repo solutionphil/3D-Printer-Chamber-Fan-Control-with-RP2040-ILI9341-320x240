@@ -22,8 +22,8 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 - **System Info Screen**
 
 ## Hardware Requirements
-- **RP2040 ZERO microcontroller** (Arduino IDE Boardmanager: Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III)
-- **ILI9341 TFT display** 2.8" 240x320 with touch screen (Red Board)
+- **RP2040 ZERO microcontroller** (`Arduino IDE Boardmanager: Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III`)
+- **ILI9341 TFT display** 2.8" 240x320 with touch screen (`Red Board`)
 - **SGP40 Sensor** for VOC Index
 - **BME280 Sensor** for temperature and humidity measurement
 - **Wires**
