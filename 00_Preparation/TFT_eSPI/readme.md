@@ -1,22 +1,30 @@
-** These Files are necessary to change for RP2040 / ILI9341. (Located in your Arduino IDE 2.x working Folder. It´s by default on Win11 machines at: C:\Users\YOUR_NAME\Documents\Arduino\libraries\TFT_eSPI ).** <br/>
-** See the PIN Configuration in RP2040_ILI9341_Touch.h or here:**<br/><br/>
-// Typical setup for the RP2040 ZERO is :<br/>
-// Display PINS:<br/>
-// Display SDO/MISO  to RP2040 pin D0 (or leave disconnected if not reading TFT)<br/>
-// Display LED       to RP2040 pin 3V3 or 5V<br/>
-// Display SCK       to RP2040 pin D2<br/>
-// Display SDI/MOSI  to RP2040 pin D3<br/>
-// Display DC (RS/AO)to RP2040 pin D4 (can use another pin if desired)<br/>
-// Display RESET     to RP2040 pin D6 (can use another pin if desired)<br/>
-// Display CS        to RP2040 pin D1 (can use another pin if desired, or GND, see below)<br/>
-// Display GND       to RP2040 pin GND (0V)<br/>
-// Display VCC       to RP2040 5V or 3.3V (5v if display has a 5V to 3.3V regulator fitted)<br/>
-// Touch Pins:<br/>
-// T_IRQ             Not Connected<br/>
-// T_D0  						to RP2040 pin D0 (must be same like Display SDO/MISO)<br/>
-// T_DIN  						to RP2040 pin D3 (must be the same like Display SDI/MOSI)<br/>
-// T_CS  						to RP2040 pin D5 (can use another pin if desired, or GND, see below)<br/>
-// T_CLK  						to RP2040 pin D1 (must be the same like Display CS)<br/><br/>
-** Alternatively you can just rename the file to User_Setup.h. The downside is that on an library update your settings might be gone... <br/>
+**RP2040 / ILI9341 Configuration Guide**
 
+These files need to be modified for RP2040 / ILI9341 compatibility. You can find them in your Arduino IDE 2.x working folder, typically located at:
+```
+C:\Users\YOUR_NAME\Documents\Arduino\libraries\TFT_eSPI\ 
+```
+
+**Pin Configuration:**
+
+**Display Pins:**
+- SDO/MISO: RP2040 pin D0 (or leave disconnected if not reading TFT)
+- LED: RP2040 pin 3V3 or 5V
+- SCK: RP2040 pin D2
+- SDI/MOSI: RP2040 pin D3
+- DC (RS/AO): RP2040 pin D4 (can use another pin if desired)
+- RESET: RP2040 pin D6 (can use another pin if desired)
+- CS: RP2040 pin D1 (can use another pin if desired, or GND, see below)
+- GND: RP2040 pin GND (0V)
+- VCC: RP2040 5V or 3.3V (5V if display has a 5V to 3.3V regulator fitted)
+
+**Touch Pins:**
+- T_IRQ: Not Connected
+- T_D0: RP2040 pin D0 (must be same as Display SDO/MISO)
+- T_DIN: RP2040 pin D3 (must be the same as Display SDI/MOSI)
+- T_CS: RP2040 pin D5 (can use another pin if desired, or GND, see below)
+- T_CLK: RP2040 pin D1 (must be the same as Display CS)
+
+**Note:**
+Alternatively, you can rename the file to `User_Setup.h`. However, be aware that your settings may be lost during a library update.
 
