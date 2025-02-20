@@ -2,8 +2,8 @@
 **There are step by step expansions until the final shape**
 **Feel free to choose what suits your needs**
 
-**00_Basic Menu**
-Simple Menu to check if the RP2040 is working with the ILI9341 display
+**00_Basic Menu**/n
+Simple Menu to check if the RP2040 is working with the ILI9341 display/n
 **01_Basic with Neopixel**
 Added Neopixel functionality for the on board LED
 **02_PWM FAN Control**
