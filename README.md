@@ -14,7 +14,7 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 - **Touch calibration**
 - **Slider-based brightness adjustment**
 - **File management**
-- **MANUAL slider based FAN control**
+- **Manual slider based FAN control**
 - **PID FAN control**
 - **Temperature and VOC measurement**
 - **Configurable display dimming and turning off**
@@ -87,7 +87,7 @@ For a visual representation of the wiring, refer to the [wiring diagram](https:/
 4. **Download and open** the *.INO file in your Arduino IDE.
 5. **Compile and upload** the code. For the first upload, press reset+boot and release the reset button. Your RP2040 Zero should be detected as a new drive in your operating system.
 6. **Enjoy!** :)
-7. 
+
 
 
 
