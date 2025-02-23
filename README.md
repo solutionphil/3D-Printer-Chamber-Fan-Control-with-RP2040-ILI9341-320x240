@@ -94,7 +94,9 @@ For a visual representation of the wiring, refer to the [wiring diagram](https:/
 
 
 
-### Disclaimer
+
+
+## Disclaimer
 
 Working with electricity and electronic components can be dangerous. Always ensure you take the necessary safety precautions when handling electrical devices.
 
