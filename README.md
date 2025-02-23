@@ -33,17 +33,17 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 ## Software Requirements
 - **Arduino IDE 2.3.4+**
   
-## Libraries for Ardiono IDE
+### Libraries for Ardiono IDE
 - **TFT_eSPI**: For TFT display control (by Bodmer)
 - **TFT_eWidget**: For Slider Control (by Bodmer)
 - **RP2040_PWM**: For PWM-based brightness control (by Khoi Hoang)
-- **Adafruit_NeoPixel** For Neopixel control
-- **Adafruit_BME280** For Temperature and Humidity measurement
-- **Adafruit_SGP40** For VOC Air Quality Measurement
+- **Adafruit_NeoPixel** For Neopixel control (by Adafruit)
+- **Adafruit_BME280** For Temperature and Humidity measurement (Adafruit)
+- **Adafruit_SGP40** For VOC Air Quality Measurement (Adafruit)
+- **QuickPID** For PID FAN Control (by David Lloyd)
 - **Wire** For I2C/Serial communication
-- **QuickPID** For PID FAN Control
 
-## Instructions
+# Instructions
 
 ### Hardware Setup
 1. **Wire your RP2040 Zero** with the ILI9341 240x320 display as follows:
@@ -94,7 +94,7 @@ For a visual representation of the wiring, refer to the [wiring diagram](https:/
 
 
 
-## Disclaimer
+### Disclaimer
 
 Working with electricity and electronic components can be dangerous. Always ensure you take the necessary safety precautions when handling electrical devices.
 
