@@ -33,7 +33,7 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 ## Software Requirements
 - **Arduino IDE 2.3.4+**
   
-### Libraries for Ardiono IDE
+### Libraries for Arduino IDE
 - **TFT_eSPI**: For TFT display control (by Bodmer)
 - **TFT_eWidget**: For Slider Control (by Bodmer)
 - **RP2040_PWM**: For PWM-based brightness control (by Khoi Hoang)
