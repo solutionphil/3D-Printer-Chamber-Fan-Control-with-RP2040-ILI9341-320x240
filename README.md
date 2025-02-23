@@ -30,7 +30,10 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 - **USB-C cable** for power supply and flashing RP2040
 - **3x 12V PWM PC Fans**
 
-## Libraries
+## Software Requirements
+- **Arduino IDE 2.3.4+**
+  
+## Libraries for Ardiono IDE
 - **TFT_eSPI**: For TFT display control (by Bodmer)
 - **TFT_eWidget**: For Slider Control (by Bodmer)
 - **RP2040_PWM**: For PWM-based brightness control (by Khoi Hoang)
@@ -81,8 +84,8 @@ This project leverages the RP2040 microcontroller to interface with an ILI9341 T
 For a visual representation of the wiring, refer to the [wiring diagram](https://www.mermaidchart.com/raw/80084e9d-4179-43a7-a02a-414e01cb094a?theme=light&version=v0.1&format=svg).
 
 ### Software Setup
-1. **Install the required libraries** in the Arduino IDE 2.x.
-2. **Install the RP2040 board**(Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III) in the Arduino IDE 2.x Boardmanager.
+1. **Install the required libraries** in the Arduino IDE 2.3.x.
+2. **Install the RP2040 board**(Raspberry Pi Pico/RP2040/RP2350 by Earle F. Philhower, III) in the Arduino IDE 2.3.x Boardmanager.
 3. **Copy the files** from the TFT_eSPI folder to your Arduino IDE working folder into `/libraries/TFT_eSPI`.
 4. **Download and open** the *.INO file in your Arduino IDE.
 5. **Compile and upload** the code. `For the first upload, press reset+boot and release the reset button`. Your RP2040 Zero should be detected as a new drive in your operating system.
