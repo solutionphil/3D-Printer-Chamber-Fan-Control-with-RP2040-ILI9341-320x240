@@ -18,5 +18,6 @@
 - T_CS: RP2040 pin D5 (can use another pin if desired, or GND, see below)
 - T_CLK: RP2040 pin D1 (must be the same as Display CS)
 
-## For wiring sensors and UART or I2C Check the Wire Diagrams
+## Other
+- For wiring sensors and UART or I2C Check the Wire Diagrams
 
